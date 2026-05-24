@@ -334,6 +334,31 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+# Simple in-memory listening history for discovery seeds
+_listen_history: dict[str, list[float]] = {}
+
+
+def _record_listen(video_id: str, when_ts: float | None = None) -> None:
+    """Track listens by video_id with timestamps to support discovery."""
+    if when_ts is None:
+        when_ts = time.time()
+    _listen_history.setdefault(video_id, []).append(when_ts)
+
+
+def _best_recent_seed(window_seconds: int = 48 * 3600) -> str | None:
+    """Return the most-listened video_id within the last window."""
+    cutoff = time.time() - window_seconds
+    best_vid: str | None = None
+    best_count = -1
+    for vid, ts_list in _listen_history.items():
+        count = sum(1 for ts in ts_list if ts >= cutoff)
+        if count > best_count:
+            best_count = count
+            best_vid = vid
+    return best_vid
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -354,6 +379,7 @@ async def health():
 @app.get("/api/search")
 async def api_search(
     q: str = Query(..., min_length=1, max_length=200, description="Search query"),
+    type: str = Query("songs", description="songs|albums|artists"),
     limit: int = Query(default=20, ge=1, le=50),
 ):
     """
@@ -367,6 +393,9 @@ async def api_search(
 
     try:
         tracks = await search_tracks(q.strip(), max_results=limit)
+        # Classification routing is lightweight in this phase; UI controls `type`.
+        # We still return tracks (single audio items) but allow future deep album/artist parsing.
+
     except yt_dlp.utils.DownloadError as exc:
         log.error("yt-dlp search error: %s", exc)
         raise HTTPException(status_code=502, detail="Search extraction failed")
@@ -389,6 +418,8 @@ async def api_track_info(video_id: str):
 
     try:
         info = await resolve_stream_url(video_id)
+        _record_listen(video_id)
+
     except HTTPException:
         raise
     except Exception as exc:

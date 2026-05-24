@@ -213,6 +213,10 @@ input{font-family:inherit}
 .buffering-ring{width:20px;height:20px;border:2px solid rgba(200,245,66,.2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
+/* Search Type Pills */
+.type-pill{padding:8px 14px;border-radius:999px;border:1px solid var(--border);background:var(--surface2);font-size:13px;font-weight:700;color:var(--text-muted);cursor:pointer;transition:border-color .15s,background .15s,color .15s}
+.type-pill:hover{border-color:var(--border-lit);color:var(--text)}
+
 /* Sleep timer badge */
 .sleep-badge{position:fixed;bottom:calc(var(--player-h) + 12px);right:16px;background:var(--surface);border:1px solid var(--accent);border-radius:40px;padding:6px 14px;font-size:12px;font-family:var(--mono);color:var(--accent);z-index:60;display:none;align-items:center;gap:8px}
 .sleep-badge.visible{display:flex}
@@ -558,6 +562,9 @@ async function handleUrlIntent(url) {
 
 const state = {
   currentTrack:  null,
+
+  // Segmented search classification: songs|albums|artists
+  searchType:    'songs',
   queue:         [],
   queueIndex:    -1,
   isPlaying:     false,
@@ -1094,7 +1101,7 @@ async function handleSearchInput(val) {
     state.isSearching  = true;
     renderContent();
     try {
-      const res  = await fetch(`${API}/api/search?q=${encodeURIComponent(state.searchQuery)}&limit=24`);
+const res  = await fetch(`${API}/api/search?q=${encodeURIComponent(state.searchQuery)}&type=${encodeURIComponent(state.searchType)}&limit=24`);
       const data = await res.json();
       state.searchResults = data.results || [];
     } catch {
@@ -1109,6 +1116,21 @@ async function handleSearchInput(val) {
 function handleSearchKey(e) {
   if (e.key === 'Escape') { e.target.value = ''; handleSearchInput(''); }
 }
+
+function setSearchType(type, btnEl) {
+  state.searchType = type;
+  // UI active styling
+  const pills = document.querySelectorAll('.type-pill');
+  pills.forEach(p => p.style.borderColor = 'var(--border)');
+  if (btnEl) btnEl.style.borderColor = 'var(--accent)';
+  // Re-run search if query exists
+  if (state.searchQuery) {
+    handleSearchInput(state.searchQuery);
+  } else {
+    renderContent();
+  }
+}
+
 
 // ── 15. Rendering ───────────────────────────────────────────────────
 
@@ -1174,6 +1196,48 @@ function renderHome() {
 }
 
 function renderSearch() {
+  if (state.isSearching) return `
+    <div class="section-header">
+      <span class="section-title">Searching…</span>
+      <span class="section-count">${state.searchType}</span>
+    </div>
+    <div class="track-grid">${Array(12).fill(0).map(()=>`
+      <div class="track-card">
+        <div class="skeleton skeleton-art"></div>
+        <div class="skeleton skeleton-text"></div>
+        <div class="skeleton skeleton-text short"></div>
+      </div>`).join('')}</div>`;
+
+  const typePills = `
+    <div class="section-header" style="margin-top:18px;margin-bottom:14px;gap:10px;flex-wrap:wrap">
+      <button class="type-pill" onclick="setSearchType('all',this)" style="${""}">All</button>
+      <button class="type-pill" onclick="setSearchType('songs',this)">Songs</button>
+      <button class="type-pill" onclick="setSearchType('albums',this)">Albums</button>
+      <button class="type-pill" onclick="setSearchType('artists',this)">Artists</button>
+    </div>`;
+
+  if (!state.searchQuery) return `
+    ${typePills}
+    <div class="empty-state">
+      <div class="empty-icon">⌕</div>
+      <div class="empty-title">Search for anything</div>
+      <div class="empty-sub">Or paste a YouTube / YouTube URL</div>
+    </div>`;
+
+  if (!state.searchResults.length) return `
+    ${typePills}
+    <div class="section-header"><span class="section-title">No results for "${esc(state.searchQuery)}"</span></div>`;
+
+  return `
+    ${typePills}
+    <div class="section-header">
+      <span class="section-title">Results</span>
+      <span class="section-count">${state.searchResults.length} ${state.searchType}</span>
+    </div>
+    <div class="track-grid">
+      ${state.searchResults.map((t,i) => renderTrackCard(t,state.searchResults,i)).join('')}
+    </div>`;
+
   if (state.isSearching) return `
     <div class="section-header"><span class="section-title">Searching…</span></div>
     <div class="track-grid">${Array(12).fill(0).map(()=>`
