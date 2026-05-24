@@ -19,7 +19,6 @@ import yt_dlp
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -335,8 +334,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -352,13 +349,6 @@ app.add_middleware(
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "service": "AuraStream"}
-
-
-@app.get("/")
-async def serve_frontend():
-    from fastapi.responses import FileResponse
-    return FileResponse("index.html")
-
 
 
 @app.get("/api/search")
@@ -522,3 +512,169 @@ _VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_\-]{11}$")
 def _validate_video_id(video_id: str) -> None:
     if not _VIDEO_ID_RE.match(video_id):
         raise HTTPException(status_code=400, detail="Invalid YouTube video ID format")
+
+
+# ── Lyrics Engine (lrclib.net) ────────────────────────────────────────────────
+
+_lyrics_cache = LRUCache(capacity=256, ttl=86400)  # cache lyrics 24h
+
+
+@app.get("/api/lyrics/{video_id}")
+async def api_lyrics(video_id: str):
+    """
+    Fetch time-synced LRC lyrics for a track via lrclib.net.
+    Falls back to plain text lyrics if synced unavailable.
+
+    GET /api/lyrics/dQw4w9WgXcQ
+    """
+    _validate_video_id(video_id)
+
+    cached = _lyrics_cache.get(f"lyrics:{video_id}")
+    if cached:
+        return JSONResponse(content=cached)
+
+    # Get track metadata so we can search lrclib by title + artist
+    info = _info_cache.get(f"track:{video_id}") or {}
+    title  = info.get("title",  "")
+    artist = info.get("artist", "")
+    duration = info.get("duration")
+
+    if not title:
+        try:
+            raw    = await resolve_stream_url(video_id)
+            title  = raw.get("title",  "")
+            artist = raw.get("artist", "")
+            duration = raw.get("duration")
+        except Exception:
+            raise HTTPException(status_code=404, detail="Track metadata not found")
+
+    # Clean title — strip featuring, remix tags for better matching
+    clean_title  = re.sub(r"\s*(feat\.|ft\.|featuring).*", "", title,  flags=re.IGNORECASE).strip()
+    clean_title  = re.sub(r"\s*[\(\[].*?[\)\]]", "", clean_title).strip()
+    clean_artist = re.sub(r"\s*,.*", "", artist).strip()  # take first artist only
+
+    result = await _fetch_lrclib(clean_title, clean_artist, duration)
+
+    if not result:
+        # Retry with original title in case clean was too aggressive
+        result = await _fetch_lrclib(title, artist, duration)
+
+    if not result:
+        result = {"synced": False, "lines": [], "plain": "", "source": "none"}
+
+    _lyrics_cache.set(f"lyrics:{video_id}", result)
+    return JSONResponse(content=result)
+
+
+async def _fetch_lrclib(title: str, artist: str, duration: Optional[float]) -> Optional[dict]:
+    """
+    Query lrclib.net for lyrics. Tries synced first, falls back to plain.
+    Returns a dict with:
+      - synced: bool
+      - lines: list of {time: float (seconds), text: str}
+      - plain: str (unsyced fallback)
+      - source: str
+    """
+    if not title:
+        return None
+
+    params = {"track_name": title}
+    if artist:
+        params["artist_name"] = artist
+    if duration:
+        params["duration"] = int(duration)
+
+    try:
+        async with httpx.AsyncClient(timeout=8, follow_redirects=True) as client:
+            resp = await client.get(
+                "https://lrclib.net/api/search",
+                params=params,
+                headers={"User-Agent": "AuraStream/1.0 (https://github.com/aurastream)"},
+            )
+            if resp.status_code != 200:
+                return None
+
+            results = resp.json()
+            if not results:
+                return None
+
+            # Pick best match — prefer synced lyrics, closest duration
+            best = _pick_best_lyrics(results, duration)
+            if not best:
+                return None
+
+            synced_lrc  = best.get("syncedLyrics")  or ""
+            plain_text  = best.get("plainLyrics")   or ""
+
+            if synced_lrc:
+                lines = _parse_lrc(synced_lrc)
+                return {
+                    "synced": True,
+                    "lines":  lines,
+                    "plain":  plain_text,
+                    "source": "lrclib",
+                }
+            elif plain_text:
+                return {
+                    "synced": False,
+                    "lines":  [],
+                    "plain":  plain_text,
+                    "source": "lrclib",
+                }
+
+    except Exception as exc:
+        log.warning("lrclib fetch error: %s", exc)
+
+    return None
+
+
+def _pick_best_lyrics(results: list, duration: Optional[float]) -> Optional[dict]:
+    """
+    From lrclib search results, prefer:
+    1. Has synced lyrics + duration close to track duration
+    2. Has synced lyrics
+    3. Has plain lyrics
+    """
+    synced  = [r for r in results if r.get("syncedLyrics")]
+    plain   = [r for r in results if r.get("plainLyrics")]
+
+    def duration_diff(r):
+        d = r.get("duration") or 0
+        return abs(d - (duration or 0))
+
+    if synced:
+        return min(synced, key=duration_diff)
+    if plain:
+        return min(plain, key=duration_diff)
+    return None
+
+
+def _parse_lrc(lrc: str) -> list[dict]:
+    """
+    Parse an LRC string into a list of {time: float, text: str} dicts.
+    Handles standard [MM:SS.xx] and [MM:SS.xxx] timestamp formats.
+    """
+    pattern = re.compile(r"\[(\d{1,2}):(\d{2})\.(\d{2,3})\](.*)")
+    lines   = []
+
+    for raw_line in lrc.splitlines():
+        m = pattern.match(raw_line.strip())
+        if not m:
+            continue
+        minutes = int(m.group(1))
+        seconds = int(m.group(2))
+        ms_raw  = m.group(3)
+        # Normalise to milliseconds
+        ms = int(ms_raw) if len(ms_raw) == 3 else int(ms_raw) * 10
+        text = m.group(4).strip()
+
+        time_s = minutes * 60 + seconds + ms / 1000.0
+        lines.append({"time": round(time_s, 3), "text": text})
+
+    return sorted(lines, key=lambda x: x["time"])
+
+
+@app.get("/")
+async def serve_frontend():
+    from fastapi.responses import FileResponse
+    return FileResponse("index.html")
