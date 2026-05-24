@@ -388,10 +388,10 @@ async def api_track_info(video_id: str):
     """
     _validate_video_id(video_id)
 
-    cached = _info_cache.get(f"track:{video_id}")
+cached = _info_cache.get(f"track:{video_id}")
     if cached:
         return JSONResponse(content=cached)
-zz
+
     try:
         info = await resolve_stream_url(video_id)
     except HTTPException:
