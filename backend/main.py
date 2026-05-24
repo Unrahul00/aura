@@ -335,7 +335,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.mount("/", StaticFiles(directory=".", html=True), name="static")
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -352,6 +352,13 @@ app.add_middleware(
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "service": "AuraStream"}
+
+
+@app.get("/")
+async def serve_frontend():
+    from fastapi.responses import FileResponse
+    return FileResponse("index.html")
+
 
 
 @app.get("/api/search")
