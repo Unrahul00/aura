@@ -301,7 +301,13 @@ input{font-family:inherit}
       </div>
       <div class="progress-wrap">
         <span class="progress-time" id="currentTimeEl">0:00</span>
-        <div class="progress-track" id="progressTrack" onclick="handleProgressClick(event)">
+        <div class="progress-track" id="progressTrack"
+             onclick="handleProgressClick(event)"
+             onpointerdown="handleProgressTouchStart(event)"
+             onpointermove="handleProgressTouchMove(event)"
+             onpointerup="handleProgressTouchEnd(event)"
+             onpointercancel="handleProgressTouchEnd(event)">
+
           <div class="progress-buffered" id="progressBuffered"></div>
           <div class="progress-fill" id="progressFill"></div>
           <div class="progress-thumb" id="progressThumb"></div>
@@ -569,7 +575,12 @@ const state = {
   queueIndex:    -1,
   isPlaying:     false,
   isBuffering:   false,
+
+  // Continuous time-tracking engine
+  currentTime:   0,
   duration:      0,
+  isDragging:    false,
+
   volume:        0.85,
   isMuted:       false,
   repeatMode:    'none',
@@ -587,7 +598,11 @@ const state = {
   lyricsData:    null,
   lyricsLoading: false,
   sleepTimer:    null,   // { endTime, intervalId, fadeId }
+
+  // Spotify-like mobile player
+  isPlayerOpen:  false,
 };
+
 
 // ── 6. Audio Engine ─────────────────────────────────────────────────
 
@@ -740,18 +755,55 @@ function toggleMute() {
 // ── 7. Progress UI ──────────────────────────────────────────────────
 
 function updateProgress() {
+  // Continuous progress tracker (observer loop)
+  if (state.isDragging) return;
+
   const t   = audio.currentTime;
   const dur = state.duration;
+
+  state.currentTime = t;
   el('currentTimeEl').textContent = fmtTime(t);
+
   if (dur > 0) {
     const pct = (t / dur) * 100;
     el('progressFill').style.width = `${pct}%`;
     el('progressThumb').style.left = `${pct}%`;
   }
+
   updateLyricsSync(t);
 }
 
+function handleScrubStart() {
+  state.isDragging = true;
+}
+
+function handleScrubChange(clientX, trackEl) {
+  // Update UI progress in real-time without fighting the cursor
+  if (!state.duration) return;
+  const rect = trackEl.getBoundingClientRect();
+  const pct  = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  const newTime = pct * state.duration;
+
+  state.currentTime = newTime;
+  el('currentTimeEl').textContent = fmtTime(newTime);
+
+  // UI-only update
+  const pct100 = pct * 100;
+  el('progressFill').style.width = `${pct100}%`;
+  el('progressThumb').style.left = `${pct100}%`;
+
+  // Optional: keep lyrics in sync visually while scrubbing
+  updateLyricsSync(newTime);
+}
+
+function handleScrubEnd(newTime) {
+  state.isDragging = false;
+  if (!state.duration) return;
+  audio.currentTime = Math.max(0, Math.min(state.duration, newTime));
+}
+
 function updateBuffered() {
+
   if (!audio.buffered.length) return;
   const buf = audio.buffered.end(audio.buffered.length - 1);
   if (state.duration > 0)
@@ -759,11 +811,37 @@ function updateBuffered() {
 }
 
 function handleProgressClick(e) {
+  // Pointer scrubbing for desktop click + keyboard
   if (!state.duration) return;
   const rect = e.currentTarget.getBoundingClientRect();
   const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  audio.currentTime = pct * state.duration;
+  handleScrubEnd(pct * state.duration);
 }
+
+function handleProgressTouchStart(e) {
+  if (!state.duration) return;
+  const trackEl = e.currentTarget;
+  handleScrubStart();
+  const touch = e.touches[0];
+  if (touch) handleScrubChange(touch.clientX, trackEl);
+}
+
+function handleProgressTouchMove(e) {
+  if (!state.isDragging) return;
+  const trackEl = e.currentTarget;
+  const touch = e.touches[0];
+  if (touch) handleScrubChange(touch.clientX, trackEl);
+}
+
+function handleProgressTouchEnd(e) {
+  if (!state.isDragging) return;
+  // compute final time from last known UI position
+  const trackEl = e.currentTarget;
+  const rect = trackEl.getBoundingClientRect();
+  const pct  = Math.max(0, Math.min(1, (state.currentTime / state.duration)));
+  handleScrubEnd(pct * state.duration);
+}
+
 
 // ── 8. Media Session API ────────────────────────────────────────────
 
