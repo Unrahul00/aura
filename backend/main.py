@@ -19,6 +19,9 @@ import yt_dlp
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+
+
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -334,6 +337,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.mount("/", StaticFiles(directory=".", html=True), name="static")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -386,7 +391,7 @@ async def api_track_info(video_id: str):
     cached = _info_cache.get(f"track:{video_id}")
     if cached:
         return JSONResponse(content=cached)
-
+zz
     try:
         info = await resolve_stream_url(video_id)
     except HTTPException:
