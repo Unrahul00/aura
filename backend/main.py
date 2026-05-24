@@ -21,8 +21,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-
-
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("aurastream")
@@ -388,7 +386,7 @@ async def api_track_info(video_id: str):
     """
     _validate_video_id(video_id)
 
-cached = _info_cache.get(f"track:{video_id}")
+    cached = _info_cache.get(f"track:{video_id}")
     if cached:
         return JSONResponse(content=cached)
 
