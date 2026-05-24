@@ -10,11 +10,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Install Python deps first (layer cache)
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/main.py .
 
 # Copy application
-COPY main.py .
+COPY backend/main.py .
+COPY backend/requirements.txt .
 
 # Non-root user for security
 RUN useradd -m -u 1001 aura && chown -R aura:aura /app
