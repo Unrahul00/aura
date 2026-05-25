@@ -280,6 +280,25 @@ input{font-family:inherit}
   .player-right{display:none}
   .lyrics-panel{width:100%}
 }
+
+/* Mobile Player Page Styles */
+.mobile-player-page{position:fixed;inset:0;background:linear-gradient(180deg, rgba(6,6,10,0.98), rgba(8,8,12,0.98));z-index:200;display:none;flex-direction:column;align-items:center;padding:22px 18px 18px;overflow:auto}
+.mobile-player-page.open{display:flex}
+.mobile-player-close{position:absolute;top:18px;right:18px;background:transparent;border:none;color:var(--text);font-size:20px}
+.mobile-player-art-wrap{width:86%;max-width:420px;border-radius:12px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,0.6);margin-top:42px}
+.mobile-player-art{width:100%;height:auto;display:block}
+.mobile-player-info{margin-top:18px;text-align:center}
+.mobile-player-title{font-size:20px;font-weight:800;letter-spacing:-.4px}
+.mobile-player-artist{font-size:14px;color:var(--text-muted);margin-top:6px}
+.mobile-player-controls{display:flex;align-items:center;gap:18px;margin-top:20px}
+.mobile-ctrl-btn{width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,0.04);border:none;color:var(--text);font-size:18px}
+.mobile-ctrl-play{width:140px;height:56px;border-radius:14px;background:var(--accent);color:#0a0a0f;font-size:28px;border:none;display:flex;align-items:center;justify-content:center}
+.mobile-player-meta{display:flex;align-items:center;gap:12px;width:100%;padding:18px 20px}
+.mobile-like-btn{width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,0.04);border:none;color:var(--text);font-size:18px}
+.mobile-player-scrub{flex:1;height:6px;background:rgba(255,255,255,0.06);border-radius:6px}
+.mobile-player-bottom{display:flex;align-items:center;justify-content:space-between;width:100%;padding:12px 20px;margin-top:auto}
+.mobile-icon{background:rgba(255,255,255,0.02);border:none;color:var(--text);padding:10px;border-radius:12px}
+
 </style>
 </head>
 <body>
@@ -327,7 +346,7 @@ input{font-family:inherit}
 
   <!-- Player -->
   <div class="player-bar" id="playerBar">
-    <div class="player-track">
+    <div class="player-track" onclick="openMobilePlayer()">
       <img class="player-thumb" id="playerThumb" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 50 50'%3E%3Crect fill='%2318181f' width='50' height='50'/%3E%3C/svg%3E" alt=""/>
       <div class="player-track-info">
         <div class="player-track-title" id="playerTitle">—</div>
@@ -369,6 +388,32 @@ input{font-family:inherit}
     </div>
     <div class="absolute-bottom-progress">
       <div id="mobileProgressFill" class="absolute-bottom-progress-fill"></div>
+    </div>
+  </div>
+
+  <!-- Mobile full-screen player page (hidden by default) -->
+  <div id="mobilePlayerPage" class="mobile-player-page" aria-hidden="true">
+    <button class="mobile-player-close" onclick="closeMobilePlayer()">✕</button>
+    <div class="mobile-player-art-wrap">
+      <img id="mpArt" class="mobile-player-art" src="" alt="art" />
+    </div>
+    <div class="mobile-player-info">
+      <div id="mpTitle" class="mobile-player-title">—</div>
+      <div id="mpArtist" class="mobile-player-artist">—</div>
+    </div>
+    <div class="mobile-player-controls">
+      <button class="mobile-ctrl-btn" onclick="prevTrack()">⏮</button>
+      <button id="mobilePlayBtn" class="mobile-ctrl-play" onclick="togglePlay()">▶</button>
+      <button class="mobile-ctrl-btn" onclick="nextTrack()">⏭</button>
+    </div>
+    <div class="mobile-player-meta">
+      <button id="mpLike" class="mobile-like-btn" onclick="toggleCurrentLike()">♡</button>
+      <input id="mobilePlayerScrub" class="mobile-player-scrub" type="range" min="0" max="100" value="0" oninput="handleMobileScrub(this.value)" onchange="handleMobileScrubEnd(this.value)" />
+    </div>
+    <div class="mobile-player-bottom">
+      <button class="mobile-icon">∞</button>
+      <button class="mobile-icon">≡</button>
+      <button class="mobile-icon">⋯</button>
     </div>
   </div>
 </div>
@@ -699,6 +744,9 @@ async function loadTrack(track, queue = [track], index = 0, autoplay = true) {
   el('playerTitle').textContent  = track.title;
   el('playerArtist').textContent = track.artist;
   el('playerThumb').src          = track.thumbnail || '';
+  const mpArt = el('mpArt'); if (mpArt) mpArt.src = track.thumbnail || '';
+  const mpt = el('mpTitle'); if (mpt) mpt.textContent = track.title;
+  const mpa = el('mpArtist'); if (mpa) mpa.textContent = track.artist;
 
   syncLikeBtn();
   extractAuraColor(track.thumbnail);
@@ -817,6 +865,7 @@ function updateProgress() {
     el('progressThumb').style.left = `${pct}%`;
     const mobileFill = document.getElementById('mobileProgressFill');
     if (mobileFill) mobileFill.style.width = `${pct}%`;
+    const mpScrub = el('mobilePlayerScrub'); if (mpScrub) mpScrub.value = pct;
   }
 
   updateLyricsSync(t);
@@ -842,6 +891,7 @@ function handleScrubChange(clientX, trackEl) {
   el('progressThumb').style.left = `${pct100}%`;
   const mobileFill = document.getElementById('mobileProgressFill');
   if (mobileFill) mobileFill.style.width = `${pct100}%`;
+  const mpScrub = el('mobilePlayerScrub'); if (mpScrub) mpScrub.value = pct100;
 
   // Optional: keep lyrics in sync visually while scrubbing
   updateLyricsSync(newTime);
@@ -851,6 +901,19 @@ function handleScrubEnd(newTime) {
   state.isDragging = false;
   if (!state.duration) return;
   audio.currentTime = Math.max(0, Math.min(state.duration, newTime));
+}
+
+function handleMobileScrub(val) {
+  state.isDragging = true;
+  if (!audio.duration) return;
+  const target = (val / 100) * audio.duration;
+  el('currentTimeEl').textContent = fmtTime(target);
+}
+
+function handleMobileScrubEnd(val) {
+  state.isDragging = false;
+  if (!audio.duration) return;
+  audio.currentTime = (val / 100) * audio.duration;
 }
 
 function updateBuffered() {
@@ -1551,6 +1614,21 @@ function playFromList(id, idList) {
   loadTrack(track, queue, queue.findIndex(t => t.id === id));
 }
 
+function openMobilePlayer() {
+  const elp = el('mobilePlayerPage'); if(!elp) return;
+  // populate values
+  el('mpTitle').textContent = el('playerTitle').textContent || '—';
+  el('mpArtist').textContent = el('playerArtist').textContent || '—';
+  const thumb = el('playerThumb') && el('playerThumb').src ? el('playerThumb').src : '';
+  const mpArt = el('mpArt'); if (mpArt) mpArt.src = thumb;
+  elp.classList.add('open'); elp.setAttribute('aria-hidden','false');
+  syncPlayBtn(); syncLikeBtn();
+}
+
+function closeMobilePlayer() {
+  const elp = el('mobilePlayerPage'); if(!elp) return; elp.classList.remove('open'); elp.setAttribute('aria-hidden','true');
+}
+
 async function likeById(id) {
   const all = [...state.searchResults, ...state.likedTracks, ...state.history];
   const t   = all.find(t => t.id === id);
@@ -1583,6 +1661,7 @@ function syncPlayBtn() {
   const btn = el('playBtn');
   if (state.isBuffering) btn.innerHTML = '<div class="buffering-ring"></div>';
   else btn.textContent = state.isPlaying ? '⏸' : '▶';
+  const mp = el('mobilePlayBtn'); if (mp) mp.textContent = state.isBuffering ? '⏸' : (state.isPlaying ? '⏸' : '▶');
 }
 
 function syncLikeBtn() {
@@ -1591,6 +1670,7 @@ function syncLikeBtn() {
   const liked = state.likedIds.has(state.currentTrack.id);
   btn.textContent = liked ? '♥' : '♡';
   btn.classList.toggle('liked', liked);
+  const mpL = el('mpLike'); if (mpL) { mpL.textContent = liked ? '♥' : '♡'; mpL.classList.toggle('liked', liked); }
 }
 
 // ── Utilities ───────────────────────────────────────────────────────
