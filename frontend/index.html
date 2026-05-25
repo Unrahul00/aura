@@ -226,6 +226,37 @@ input{font-family:inherit}
 .sleep-cancel{cursor:pointer;opacity:.6;font-size:16px;transition:opacity .15s}
 .sleep-cancel:hover{opacity:1}
 
+/* Mobile Bottom Tab Bar */
+.mobile-tab-bar{
+  display:none;
+  position:fixed;
+  bottom:0;left:0;right:0;
+  height:56px;
+  background:rgba(11,11,18,0.97);
+  backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);
+  border-top:1px solid var(--border);
+  z-index:48;
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+.mobile-tab-bar-inner{
+  display:flex;
+  align-items:center;
+  justify-content:space-around;
+  height:56px;
+}
+.mobile-tab-btn{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;flex:1;height:100%;
+  background:none;border:none;color:var(--text-dim);
+  font-size:10px;font-weight:600;font-family:var(--font);
+  letter-spacing:.5px;text-transform:uppercase;
+  cursor:pointer;transition:color .15s;
+  -webkit-tap-highlight-color:transparent;
+}
+.mobile-tab-btn .tab-icon{font-size:18px;line-height:1}
+.mobile-tab-btn:hover,.mobile-tab-btn.active{color:var(--accent)}
+
 /* Responsive */
 @media(max-width:768px){
   :root{--sidebar-w:0px;--player-h:76px}
@@ -233,8 +264,10 @@ input{font-family:inherit}
   /* Layout: keep grid but ensure content isn't clipped by floating controls */
   #app{grid-template-columns:1fr;grid-template-rows:1fr}
   .sidebar{display:none}
+  .mobile-tab-bar{display:block}
   .main{grid-column:1}
-  .content{padding:0 16px calc(var(--player-h) + 24px + env(safe-area-inset-bottom));}
+  /* Extra bottom padding: pill player (64px) + gap + tab bar (56px) + safe area */
+  .content{padding:0 16px calc(64px + 16px + 56px + env(safe-area-inset-bottom, 0px) + 16px);}
   .topbar{padding:16px 16px 12px}
   .track-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
 
@@ -582,13 +615,30 @@ input{font-family:inherit}
     <div id="mobileLyricsBody" class="lyrics-body mobile-lyrics-body">
       <div class="lyrics-none"><span class="icon">♪</span><span>Play a track to see lyrics</span></div>
     </div>
-    <div class="mobile-player-bottom">
-      <button class="mobile-icon">∞</button>
-      <button class="mobile-icon">≡</button>
-      <button class="mobile-icon">⋯</button>
-    </div>
+
   </div>
 </div>
+
+<!-- Mobile Bottom Tab Bar -->
+<nav class="mobile-tab-bar" id="mobileTabBar">
+  <div class="mobile-tab-bar-inner">
+    <button class="mobile-tab-btn active" data-view="home" onclick="mobileTabNav('home',this)">
+      <span class="tab-icon">⌂</span>Home
+    </button>
+    <button class="mobile-tab-btn" data-view="search" onclick="mobileTabNav('search',this)">
+      <span class="tab-icon">⌕</span>Search
+    </button>
+    <button class="mobile-tab-btn" data-view="nowplaying" onclick="mobileTabNav('nowplaying',this)">
+      <span class="tab-icon">♫</span>Now Playing
+    </button>
+    <button class="mobile-tab-btn" data-view="liked" onclick="mobileTabNav('liked',this)">
+      <span class="tab-icon">♡</span>Liked
+    </button>
+    <button class="mobile-tab-btn" data-view="library" onclick="mobileTabNav('library',this)">
+      <span class="tab-icon">◧</span>Library
+    </button>
+  </div>
+</nav>
 
 <!-- Lyrics Panel -->
 <div class="lyrics-panel" id="lyricsPanel">
@@ -1351,6 +1401,11 @@ function renderLyricsPanel() {
     return;
   }
 
+  // Auto-show mobile lyrics body when lyrics are available
+  if (bodyMobile && el('mobilePlayerPage')?.classList.contains('open')) {
+    bodyMobile.style.display = 'block';
+  }
+
   if (data.synced && data.lines.length) {
     const linesHtml = data.lines.map((line, i) =>
       `<div class="lyric-line" data-idx="${i}" data-time="${line.time}"
@@ -1379,7 +1434,10 @@ function renderLyricsPanel() {
 }
 
 function updateLyricsSync(currentTime) {
-  if (!state.lyricsOpen || !state.lyricsData?.synced) return;
+  const mobilePlayerOpen = el('mobilePlayerPage')?.classList.contains('open');
+  const onNpPage = state.view === 'nowplaying';
+  if (!state.lyricsOpen && !mobilePlayerOpen && !onNpPage) return;
+  if (!state.lyricsData?.synced) return;
   const lines = state.lyricsData.lines;
   if (!lines?.length) return;
 
@@ -1411,10 +1469,12 @@ function updateLyricsSync(currentTime) {
     if (i === best) el.classList.add('active');
   });
 
-  // Smooth scroll active line into view
-  const activeLine = body.querySelector('.lyric-line.active') || bodyMobile?.querySelector('.lyric-line.active');
-  if (activeLine) {
-    activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  // Smooth scroll active line into view in whichever container is visible
+  const activeLine = body.querySelector('.lyric-line.active');
+  if (activeLine) activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (bodyMobile && bodyMobile.style.display !== 'none') {
+    const activeMobile = bodyMobile.querySelector('.lyric-line.active');
+    if (activeMobile) activeMobile.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 }
 
@@ -2004,7 +2064,11 @@ function openMobilePlayer() {
   const mpArt = el('mpArt'); if (mpArt) mpArt.src = thumb;
   setMobilePlayerExpanded(state.lyricsOpen);
   const lyricsBody = el('mobileLyricsBody');
-  if (lyricsBody) lyricsBody.style.display = state.lyricsOpen ? 'block' : 'none';
+  if (lyricsBody) {
+    // Auto-show lyrics if we have synced data, regardless of lyricsOpen toggle
+    const hasLyrics = state.lyricsData && (state.lyricsData.synced || state.lyricsData.plain);
+    lyricsBody.style.display = (state.lyricsOpen || hasLyrics) ? 'block' : 'none';
+  }
   elp.classList.add('open'); elp.setAttribute('aria-hidden','false');
   syncPlayBtn(); syncLikeBtn();
   if (state.currentTrack && !state.lyricsData) fetchLyrics(state.currentTrack.id);
@@ -2639,8 +2703,29 @@ function toggleThemePanel() {
   btn.classList.toggle('active', open);
 }
 
-// Init theme
-initThemePresets();
+// ── Mobile Tab Bar Navigation ───────────────────────────────────────
+function mobileTabNav(view, btnEl) {
+  // Sync mobile tab bar active state
+  document.querySelectorAll('.mobile-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  // Also sync sidebar items
+  document.querySelectorAll('.sidebar-item').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+
+  if (view === 'library') {
+    // Library = playlists on mobile
+    view = 'playlists';
+    document.querySelectorAll('.mobile-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.view === 'library'));
+  }
+
+  state.view = view;
+  renderContent();
+
+  // If navigating to nowplaying and no lyrics loaded yet, fetch
+  if (view === 'nowplaying' && state.currentTrack && !state.lyricsData && !state.lyricsLoading) {
+    setTimeout(() => fetchLyrics(state.currentTrack.id).then(() => refreshNpLyricsBody()), 100);
+  }
+}
+
+
 loadTheme();
 
 function handleSearchKey(e) {
