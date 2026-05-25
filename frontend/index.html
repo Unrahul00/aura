@@ -2274,28 +2274,38 @@ function closeLyricsFullscreen() {
   state.lyricsFullscreen = false;
 }
 
-// Patch updateLyricsSync to also update fullscreen body
+// Patch updateLyricsSync to also update fullscreen body + NP page
 const _origUpdateLyricsSync = updateLyricsSync;
 function updateLyricsSync(currentTime) {
   _origUpdateLyricsSync(currentTime);
 
   // Mirror active state to fullscreen panel
-  if (!state.lyricsFullscreen) return;
-  const fsBody = el('lyricsfsBody');
-  if (!fsBody) return;
+  if (state.lyricsFullscreen) {
+    const fsBody = el('lyricsfsBody');
+    if (fsBody) {
+      const fsLines = fsBody.querySelectorAll('.lyric-line');
+      const srcLines = el('lyricsBody')?.querySelectorAll('.lyric-line');
+      if (srcLines) {
+        srcLines.forEach((srcLine, i) => { if (fsLines[i]) fsLines[i].className = srcLine.className; });
+        const activeLine = fsBody.querySelector('.lyric-line.active');
+        if (activeLine) activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }
 
-  const fsLines = fsBody.querySelectorAll('.lyric-line');
-  const srcLines = el('lyricsBody')?.querySelectorAll('.lyric-line');
-  if (!srcLines) return;
-
-  srcLines.forEach((srcLine, i) => {
-    if (!fsLines[i]) return;
-    fsLines[i].className = srcLine.className;
-  });
-
-  // Scroll active line in fullscreen
-  const activeLine = fsBody.querySelector('.lyric-line.active');
-  if (activeLine) activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  // Sync NP page lyrics
+  if (state.view === 'nowplaying' && state.lyricsData?.synced) {
+    const lines = state.lyricsData.lines;
+    if (!lines?.length) return;
+    let lo = 0, hi = lines.length - 1, best = 0;
+    while (lo <= hi) { const mid = (lo+hi)>>1; if (lines[mid].time <= currentTime){best=mid;lo=mid+1;}else hi=mid-1; }
+    const body = el('npLyricsBody');
+    if (!body) return;
+    const allLines = body.querySelectorAll('.np-lyric-line');
+    allLines.forEach((e2, i) => { e2.classList.remove('active','past'); if(i<best)e2.classList.add('past'); if(i===best)e2.classList.add('active'); });
+    const al = body.querySelector('.np-lyric-line.active');
+    if (al) al.scrollIntoView({ behavior:'smooth', block:'center' });
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2403,13 +2413,21 @@ async function saveNewPlaylistFromCard(e) {
 }
 
 // ── Patch setView with page transition ─────────────────────────────
-const _origSetView = setView;
+// Re-declare setView to wrap the original logic inline (no reference needed)
 function setView(view, btnEl) {
   const c = el('content');
   c.classList.add('page-leaving');
   setTimeout(() => {
     c.classList.remove('page-leaving');
-    _origSetView(view, btnEl);
+    // Original setView logic
+    state.view = view;
+    document.querySelectorAll('.sidebar-item').forEach(b => b.classList.remove('active'));
+    if (btnEl) btnEl.classList.add('active');
+    else {
+      const m = document.querySelector(`[data-view="${view}"]`);
+      if (m) m.classList.add('active');
+    }
+    renderContent();
     c.classList.add('page-entering');
     setTimeout(() => c.classList.remove('page-entering'), 320);
   }, 160);
@@ -2487,53 +2505,21 @@ function refreshNpLyricsBody() {
 }
 
 // Patch renderContent to include nowplaying
-const _origRenderContent = renderContent;
 function renderContent() {
   const c = el('content');
   switch (state.view) {
+    case 'home':       c.innerHTML = renderHome();       break;
+    case 'search':     c.innerHTML = renderSearch();     break;
+    case 'liked':      c.innerHTML = renderLiked();      break;
+    case 'history':    c.innerHTML = renderHistory();    break;
+    case 'playlists':  c.innerHTML = renderPlaylists();  break;
+    case 'import':     c.innerHTML = renderImport();     break;
     case 'nowplaying': c.innerHTML = renderNowPlaying(); break;
-    default: _origRenderContent(); break;
+    default:           c.innerHTML = renderHome();
   }
 }
 
-// Patch loadTrack to fetch lyrics for NP page too
-const _origLoadTrack = loadTrack;
-async function loadTrack(track, queue, index, autoplay) {
-  await _origLoadTrack(track, queue, index, autoplay);
-  if (state.view === 'nowplaying') {
-    fetchLyrics(track.id).then(() => refreshNpLyricsBody());
-  }
-}
-
-// Sync lyrics highlighting on NP page
-const _origUpdateLyricsSync = updateLyricsSync;
-function updateLyricsSync(currentTime) {
-  _origUpdateLyricsSync(currentTime);
-  if (state.view !== 'nowplaying') return;
-  if (!state.lyricsData?.synced) return;
-  const lines = state.lyricsData.lines;
-  if (!lines?.length) return;
-  let lo = 0, hi = lines.length - 1, best = 0;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    if (lines[mid].time <= currentTime) { best = mid; lo = mid + 1; }
-    else hi = mid - 1;
-  }
-  const body = el('npLyricsBody');
-  if (!body) return;
-  const allLines = body.querySelectorAll('.np-lyric-line');
-  allLines.forEach((el2, i) => {
-    el2.classList.remove('active','past');
-    if (i < best)  el2.classList.add('past');
-    if (i === best) el2.classList.add('active');
-  });
-  const activeLine = body.querySelector('.np-lyric-line.active');
-  if (activeLine) activeLine.scrollIntoView({ behavior:'smooth', block:'center' });
-}
-
-// When NP page is opened, auto-fetch lyrics
-const _origSetViewInner = window._origSetView;
-// Hook: when navigating to nowplaying, load lyrics
+// Hook: NP page lyrics - fetch on nav, sync on time update
 document.addEventListener('click', e => {
   const btn = e.target.closest('[data-view="nowplaying"]');
   if (btn && state.currentTrack && !state.lyricsData && !state.lyricsLoading) {
