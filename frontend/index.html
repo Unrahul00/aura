@@ -2953,6 +2953,9 @@ window.addEventListener('resize', applyMobileLayout);
 function mobileTabSearch(btnEl) {
   // Mark search tab as active
   document.querySelectorAll('.mobile-tab-btn').forEach(b => b.classList.toggle('active', b === btnEl));
+  openMobileSearch();
+}
+
 
   const overlay = el('mobileSearchOverlay');
   if (overlay) {
@@ -2971,6 +2974,86 @@ function closeMobileSearch() {
 }
 
 
+
+
+function openMobileSearch() {
+  const overlay = document.getElementById('mobileSearchOverlay');
+  if (overlay) overlay.classList.add('open');
+
+  const input = document.getElementById('mobileSearchInput');
+  if (input) {
+    setTimeout(() => input.focus(), 100);
+  }
+}
+
+function closeMobileSearch() {
+  const overlay = document.getElementById('mobileSearchOverlay');
+  if (overlay) overlay.classList.remove('open');
+}
+
+function mobileTabSearch(btn) {
+  document.querySelectorAll('.mobile-tab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  openMobileSearch();
+}
+
+
+// ── Playback Persistence ─────────────────────────────
+
+function savePlaybackState() {
+  try {
+    if (!state.currentTrack) return;
+
+    const playbackState = {
+      track: state.currentTrack,
+      queue: state.queue || [],
+      queueIndex: state.queueIndex || 0,
+      currentTime: audio.currentTime || 0,
+      isPlaying: state.isPlaying || false
+    };
+
+    localStorage.setItem('aurastream_playback', JSON.stringify(playbackState));
+  } catch(e) {}
+}
+
+async function restorePlaybackState() {
+  try {
+    const raw = localStorage.getItem('aurastream_playback');
+    if (!raw) return;
+
+    const saved = JSON.parse(raw);
+    if (!saved.track) return;
+
+    await loadTrack(
+      saved.track,
+      saved.queue || [saved.track],
+      saved.queueIndex || 0
+    );
+
+    audio.addEventListener('loadedmetadata', () => {
+      audio.currentTime = saved.currentTime || 0;
+    }, { once:true });
+
+    if (!saved.isPlaying) {
+      audio.pause();
+      state.isPlaying = false;
+
+      const playBtn = document.getElementById('playBtn');
+      const mobilePlayBtn = document.getElementById('mobilePlayBtn');
+
+      if (playBtn) playBtn.textContent = '▶';
+      if (mobilePlayBtn) mobilePlayBtn.textContent = '▶';
+    }
+  } catch(e) {
+    console.log('Playback restore failed', e);
+  }
+}
+
+setInterval(savePlaybackState, 2000);
+window.addEventListener('beforeunload', savePlaybackState);
+window.addEventListener('load', () => {
+  setTimeout(restorePlaybackState, 1000);
+});
 
 </script>
 </body>
