@@ -408,6 +408,8 @@ input{font-family:inherit}
     </div>
     <div class="mobile-player-meta">
       <button id="mpLike" class="mobile-like-btn" onclick="toggleCurrentLike()">♡</button>
+      <button id="mpAdd" class="mobile-add-btn" onclick="addCurrentToPlaylist()" title="Add to playlist">＋</button>
+      <button id="mpNewPl" class="mobile-newpl-btn" onclick="createPlaylistPrompt()" title="New playlist">✚</button>
       <input id="mobilePlayerScrub" class="mobile-player-scrub" type="range" min="0" max="100" value="0" oninput="handleMobileScrub(this.value)" onchange="handleMobileScrubEnd(this.value)" />
     </div>
     <div class="mobile-player-bottom">
@@ -1065,33 +1067,44 @@ async function fetchLyrics(videoId) {
 
 function renderLyricsPanel() {
   const body = el('lyricsBody');
+  const bodyMobile = el('mobileLyricsBody');
   if (!body) return;
 
   if (state.lyricsLoading) {
-    body.innerHTML = `<div class="lyrics-loading">Loading lyrics…</div>`;
+    const loadingHtml = `<div class="lyrics-loading">Loading lyrics…</div>`;
+    body.innerHTML = loadingHtml;
+    if (bodyMobile) bodyMobile.innerHTML = loadingHtml;
     return;
   }
 
   const data = state.lyricsData;
   if (!data || data.source === 'none') {
-    body.innerHTML = `<div class="lyrics-none"><span class="icon">♪</span><span>No lyrics found</span></div>`;
+    const noneHtml = `<div class="lyrics-none"><span class="icon">♪</span><span>No lyrics found</span></div>`;
+    body.innerHTML = noneHtml;
+    if (bodyMobile) bodyMobile.innerHTML = noneHtml;
     return;
   }
 
   if (data.synced && data.lines.length) {
-    body.innerHTML = data.lines.map((line, i) =>
+    const linesHtml = data.lines.map((line, i) =>
       `<div class="lyric-line" data-idx="${i}" data-time="${line.time}"
             onclick="audio.currentTime=${line.time}">${esc(line.text) || '♩'}</div>`
     ).join('');
+    body.innerHTML = linesHtml;
+    if (bodyMobile) bodyMobile.innerHTML = linesHtml;
     return;
   }
 
   if (data.plain) {
-    body.innerHTML = `<div class="lyrics-plain">${esc(data.plain)}</div>`;
+    const plainHtml = `<div class="lyrics-plain">${esc(data.plain)}</div>`;
+    body.innerHTML = plainHtml;
+    if (bodyMobile) bodyMobile.innerHTML = plainHtml;
     return;
   }
 
-  body.innerHTML = `<div class="lyrics-none"><span class="icon">♪</span><span>No lyrics found</span></div>`;
+  const fallback = `<div class="lyrics-none"><span class="icon">♪</span><span>No lyrics found</span></div>`;
+  body.innerHTML = fallback;
+  if (bodyMobile) bodyMobile.innerHTML = fallback;
 }
 
 function updateLyricsSync(currentTime) {
@@ -1135,6 +1148,12 @@ function toggleLyrics() {
 
   if (state.lyricsOpen && state.currentTrack && !state.lyricsData) {
     fetchLyrics(state.currentTrack.id);
+  }
+  // If mobile player visible, also ensure mobile lyrics area is visible
+  const mp = el('mobilePlayerPage');
+  const mobileLyrics = el('mobileLyricsBody');
+  if (mp && mp.classList.contains('open') && mobileLyrics) {
+    mobileLyrics.style.display = state.lyricsOpen ? 'block' : 'none';
   }
 }
 
@@ -1612,6 +1631,44 @@ function playFromList(id, idList) {
   if (!track || !queue.length) return;
 
   loadTrack(track, queue, queue.findIndex(t => t.id === id));
+}
+
+// ── Playlist helpers (create + add) ─────────────────────────────
+async function createPlaylist(name) {
+  if (!name || !name.trim()) return;
+  const id = 'pl_' + Date.now();
+  const pl = { id, name: name.trim(), tracks: [], createdAt: Date.now() };
+  await dbPut('playlists', pl);
+  state.playlists.push(pl);
+  showToast(`Playlist "${name}" created ✓`);
+  renderContent();
+}
+
+function createPlaylistPrompt() {
+  const name = prompt('New playlist name:');
+  if (!name) return;
+  createPlaylist(name);
+}
+
+async function addCurrentToPlaylist() {
+  if (!state.currentTrack) { showToast('No track selected', true); return; }
+  const existing = state.playlists || [];
+  const listNames = existing.map(p => p.name).join('\n') || '(none)';
+  const sel = prompt(`Playlists:\n${listNames}\n\nEnter playlist name to add (will create if not exists):`);
+  if (!sel) return;
+  let pl = existing.find(p => p.name === sel);
+  if (!pl) {
+    const id = 'pl_' + Date.now();
+    pl = { id, name: sel.trim(), tracks: [], createdAt: Date.now() };
+    await dbPut('playlists', pl);
+    state.playlists.push(pl);
+  }
+  if (!pl.tracks.some(t => t.id === state.currentTrack.id)) {
+    pl.tracks.push(state.currentTrack);
+    await dbPut('playlists', pl);
+    showToast(`Added to ${pl.name} ✓`);
+  } else showToast('Track already in playlist');
+  renderContent();
 }
 
 function openMobilePlayer() {
