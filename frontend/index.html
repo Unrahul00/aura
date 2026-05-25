@@ -1705,6 +1705,27 @@ function updateLyricsSync(currentTime) {
     const activeMobile = bodyMobile.querySelector('.lyric-line.active');
     if (activeMobile) activeMobile.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
+
+  // Mirror to fullscreen panel
+  if (state.lyricsFullscreen) {
+    const fsBody = el('lyricsfsBody');
+    if (fsBody) {
+      const fsLines = fsBody.querySelectorAll('.lyric-line');
+      const srcLines = body.querySelectorAll('.lyric-line');
+      srcLines.forEach((srcLine, i) => { if (fsLines[i]) fsLines[i].className = srcLine.className; });
+      const fsal = fsBody.querySelector('.lyric-line.active');
+      if (fsal) fsal.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  // Sync NP page lyrics panel
+  const npBody = el('npLyricsBody');
+  if (npBody) {
+    const npLines = npBody.querySelectorAll('.np-lyric-line');
+    npLines.forEach((e2, i) => { e2.classList.remove('active','past'); if(i<best)e2.classList.add('past'); if(i===best)e2.classList.add('active'); });
+    const npal = npBody.querySelector('.np-lyric-line.active');
+    if (npal) npal.scrollIntoView({ behavior:'smooth', block:'center' });
+  }
 }
 
 function toggleLyrics() {
@@ -1912,19 +1933,6 @@ function setSearchType(type, btnEl) {
 
 
 // ── 15. Rendering ───────────────────────────────────────────────────
-
-function renderContent() {
-  const c = el('content');
-  switch (state.view) {
-    case 'home':     c.innerHTML = renderHome();     break;
-    case 'search':   c.innerHTML = renderSearch();   break;
-    case 'liked':    c.innerHTML = renderLiked();    break;
-    case 'history':  c.innerHTML = renderHistory();  break;
-    case 'playlists':c.innerHTML = renderPlaylists();break;
-    case 'import':   c.innerHTML = renderImport();   break;
-    default:         c.innerHTML = renderHome();
-  }
-}
 
 function renderHome() {
   const t = state.currentTrack;
@@ -2331,17 +2339,6 @@ async function likeById(id) {
 
 // ── View Routing ────────────────────────────────────────────────────
 
-function setView(view, btnEl) {
-  state.view = view;
-  document.querySelectorAll('.sidebar-item').forEach(b => b.classList.remove('active'));
-  if (btnEl) btnEl.classList.add('active');
-  else {
-    const m = document.querySelector(`[data-view="${view}"]`);
-    if (m) m.classList.add('active');
-  }
-  renderContent();
-}
-
 function setViewSilent(view) {
   state.view = view;
   document.querySelectorAll('.sidebar-item').forEach(b => {
@@ -2356,6 +2353,7 @@ function syncPlayBtn() {
   if (state.isBuffering) btn.innerHTML = '<div class="buffering-ring"></div>';
   else btn.textContent = state.isPlaying ? '⏸' : '▶';
   const mp = el('mobilePlayBtn'); if (mp) mp.textContent = state.isBuffering ? '⏸' : (state.isPlaying ? '⏸' : '▶');
+  const mmb = el('mobileMiniPlayBtn'); if (mmb) mmb.textContent = state.isBuffering ? '…' : (state.isPlaying ? '⏸' : '▶');
 }
 
 function syncLikeBtn() {
@@ -2565,40 +2563,6 @@ function closeLyricsFullscreen() {
   const fs = el('lyricsFullscreen');
   if (fs) fs.classList.remove('open');
   state.lyricsFullscreen = false;
-}
-
-// Patch updateLyricsSync to also update fullscreen body + NP page
-const _origUpdateLyricsSync = updateLyricsSync;
-function updateLyricsSync(currentTime) {
-  _origUpdateLyricsSync(currentTime);
-
-  // Mirror active state to fullscreen panel
-  if (state.lyricsFullscreen) {
-    const fsBody = el('lyricsfsBody');
-    if (fsBody) {
-      const fsLines = fsBody.querySelectorAll('.lyric-line');
-      const srcLines = el('lyricsBody')?.querySelectorAll('.lyric-line');
-      if (srcLines) {
-        srcLines.forEach((srcLine, i) => { if (fsLines[i]) fsLines[i].className = srcLine.className; });
-        const activeLine = fsBody.querySelector('.lyric-line.active');
-        if (activeLine) activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }
-  }
-
-  // Sync NP page lyrics
-  if (state.view === 'nowplaying' && state.lyricsData?.synced) {
-    const lines = state.lyricsData.lines;
-    if (!lines?.length) return;
-    let lo = 0, hi = lines.length - 1, best = 0;
-    while (lo <= hi) { const mid = (lo+hi)>>1; if (lines[mid].time <= currentTime){best=mid;lo=mid+1;}else hi=mid-1; }
-    const body = el('npLyricsBody');
-    if (!body) return;
-    const allLines = body.querySelectorAll('.np-lyric-line');
-    allLines.forEach((e2, i) => { e2.classList.remove('active','past'); if(i<best)e2.classList.add('past'); if(i===best)e2.classList.add('active'); });
-    const al = body.querySelector('.np-lyric-line.active');
-    if (al) al.scrollIntoView({ behavior:'smooth', block:'center' });
-  }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -3008,14 +2972,6 @@ function closeMobileSearch() {
     if (inp) inp.value = '';
   }
 }
-
-// Patch syncPlayBtn to also update mobile mini play button
-const _origSyncPlayBtnMobile = syncPlayBtn;
-syncPlayBtn = function() {
-  _origSyncPlayBtnMobile();
-  const mmb = el('mobileMiniPlayBtn');
-  if (mmb) mmb.textContent = state.isBuffering ? '…' : (state.isPlaying ? '⏸' : '▶');
-};
 
 
 
