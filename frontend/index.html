@@ -558,6 +558,10 @@ input{font-family:inherit}
 /* Autocomplete Dropdown */
 .search-suggestions{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--surface);border:1px solid var(--border-lit);border-radius:14px;overflow:hidden;z-index:200;box-shadow:0 8px 32px rgba(0,0,0,.5);display:none}
 .search-suggestions.visible{display:block}
+.suggestion-section{padding:9px 16px 5px;font:10px var(--mono);letter-spacing:1.4px;text-transform:uppercase;color:var(--text-dim)}
+.suggestion-chip-row{display:flex;gap:8px;flex-wrap:wrap;padding:8px 12px 12px}
+.suggestion-chip{padding:7px 10px;border:1px solid var(--border);border-radius:999px;background:var(--surface2);font-size:12px;color:var(--text-muted);cursor:pointer}
+.suggestion-chip:hover{border-color:var(--accent);color:var(--accent)}
 .suggestion-item{display:flex;align-items:center;gap:12px;padding:10px 16px;cursor:pointer;transition:background .1s}
 .suggestion-item:hover{background:var(--surface2)}
 .suggestion-thumb{width:36px;height:36px;border-radius:6px;object-fit:cover;background:var(--surface2);flex-shrink:0}
@@ -565,6 +569,28 @@ input{font-family:inherit}
 .suggestion-title{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .suggestion-artist{font-size:11px;color:var(--text-muted);margin-top:1px}
 .suggestion-play-icon{font-size:12px;color:var(--text-dim);flex-shrink:0}
+.search-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px}
+.search-tool-btn,.sort-select{height:34px;border-radius:999px;border:1px solid var(--border);background:var(--surface2);color:var(--text-muted);padding:0 12px;font-size:12px;font-weight:700}
+.search-tool-btn:hover,.search-tool-btn.active{border-color:var(--accent);color:var(--accent)}
+.sort-select{outline:none}
+.continue-card{display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;cursor:pointer;min-width:0}
+.continue-card:hover{border-color:var(--border-lit)}
+.continue-art{width:54px;height:54px;border-radius:8px;object-fit:cover;background:var(--surface);flex-shrink:0}
+.continue-info{min-width:0;flex:1}
+.continue-title{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.continue-sub{font-size:11px;color:var(--text-muted);margin-top:3px}
+.continue-progress{height:3px;background:rgba(255,255,255,.08);border-radius:3px;margin-top:8px;overflow:hidden}
+.continue-progress span{display:block;height:100%;background:var(--accent)}
+.playlist-cover{width:44px;height:44px;border-radius:8px;overflow:hidden;background:var(--surface2);display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;flex-shrink:0}
+.playlist-cover img{width:100%;height:100%;object-fit:cover}
+.playlist-cover.single{display:block}
+.playlist-pin{opacity:1;color:var(--text-dim)}
+.playlist-pin.pinned{color:var(--accent)}
+.multi-check{width:18px;height:18px;accent-color:var(--accent)}
+.selection-bar{position:sticky;top:76px;z-index:8;display:flex;align-items:center;gap:10px;background:rgba(17,17,24,.96);border:1px solid var(--border-lit);border-radius:999px;padding:8px 12px;margin-bottom:14px;backdrop-filter:blur(18px)}
+.selection-bar span{font-size:12px;color:var(--text-muted);font-family:var(--mono)}
+.pull-refresh{position:fixed;top:10px;left:50%;transform:translateX(-50%) translateY(-70px);background:var(--surface);border:1px solid var(--border-lit);border-radius:999px;padding:9px 16px;font:12px var(--mono);color:var(--accent);z-index:220;transition:transform .2s}
+.pull-refresh.visible{transform:translateX(-50%) translateY(0)}
 
 /* Lyrics Fullscreen */
 .lyrics-fullscreen{position:fixed;inset:0;z-index:300;background:rgba(6,6,10,0.97);backdrop-filter:blur(32px);display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .3s}
@@ -3058,6 +3084,542 @@ window.addEventListener('beforeunload', savePlaybackState);
 window.addEventListener('load', () => {
   setTimeout(restorePlaybackState, 1000);
 });
+
+// ---- Feature Pack: continue listening, mobile gestures, richer search, library tools ----
+const AURA_PROGRESS_KEY = 'aurastream_track_progress_v1';
+const AURA_SEARCH_KEY = 'aurastream_recent_searches_v1';
+const AURA_PIN_KEY = 'aurastream_pinned_playlists_v1';
+const AURA_PLAY_COUNT_KEY = 'aurastream_play_counts_v1';
+const AURA_TRENDING = ['lofi beats', 'arijit singh', 'weeknd', 'night drive', 'chill mix', 'punjabi hits', 'taylor swift', 'podcast'];
+
+Object.assign(state, {
+  recentSearches: loadJson(AURA_SEARCH_KEY, []),
+  pinnedPlaylists: new Set(loadJson(AURA_PIN_KEY, [])),
+  playCounts: loadJson(AURA_PLAY_COUNT_KEY, {}),
+  selectedTrackIds: new Set(),
+  playlistSort: localStorage.getItem('aurastream_playlist_sort') || 'pinned',
+  trackSort: localStorage.getItem('aurastream_track_sort') || 'newest',
+  durationFilter: localStorage.getItem('aurastream_duration_filter') || 'any',
+});
+
+function loadJson(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+}
+
+function saveJson(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+
+function haptic(ms = 12) {
+  try { if (navigator.vibrate) navigator.vibrate(ms); } catch {}
+}
+
+function getTrackProgress() {
+  return loadJson(AURA_PROGRESS_KEY, {});
+}
+
+function saveTrackProgress() {
+  if (!state.currentTrack || !isFinite(audio.currentTime)) return;
+  const duration = state.duration || audio.duration || state.currentTrack.duration || 0;
+  const progress = getTrackProgress();
+  if (duration && (duration - audio.currentTime) < 12) delete progress[state.currentTrack.id];
+  else if (audio.currentTime > 8) {
+    progress[state.currentTrack.id] = {
+      track: state.currentTrack,
+      currentTime: audio.currentTime,
+      duration,
+      updatedAt: Date.now(),
+    };
+  }
+  saveJson(AURA_PROGRESS_KEY, progress);
+}
+
+function getContinueItems(limit = 8) {
+  return Object.values(getTrackProgress())
+    .filter(p => p?.track && p.currentTime > 8 && (!p.duration || p.currentTime < p.duration - 12))
+    .sort((a,b) => b.updatedAt - a.updatedAt)
+    .slice(0, limit);
+}
+
+async function resumeProgressTrack(id) {
+  const item = getTrackProgress()[id];
+  if (!item?.track) return;
+  await loadTrack(item.track, [item.track], 0, true);
+  audio.addEventListener('loadedmetadata', () => {
+    audio.currentTime = Math.min(item.currentTime || 0, Math.max(0, (audio.duration || item.duration || 0) - 1));
+  }, { once:true });
+}
+
+function renderContinueListening() {
+  const items = getContinueItems();
+  if (!items.length) return '';
+  return `
+    <div class="section-header">
+      <span class="section-title">Continue Listening</span>
+      <span class="section-count">${items.length}</span>
+    </div>
+    <div class="track-grid">
+      ${items.map(p => {
+        const pct = p.duration ? Math.min(100, (p.currentTime / p.duration) * 100) : 0;
+        return `
+          <div class="continue-card" onclick="resumeProgressTrack('${esc(p.track.id)}')">
+            <img class="continue-art" src="${esc(p.track.thumbnail || '')}" alt="" onerror="this.style.opacity=.1"/>
+            <div class="continue-info">
+              <div class="continue-title">${esc(p.track.title)}</div>
+              <div class="continue-sub">${fmtTime(p.currentTime)}${p.duration ? ` / ${fmtTime(p.duration)}` : ''}</div>
+              <div class="continue-progress"><span style="width:${pct}%"></span></div>
+            </div>
+          </div>`;
+      }).join('')}
+    </div>`;
+}
+
+const _baseRenderHome = renderHome;
+renderHome = function() {
+  return renderContinueListening() + _baseRenderHome();
+};
+
+const _baseLoadTrack = loadTrack;
+loadTrack = async function(track, queue = [track], index = 0, autoplay = true) {
+  haptic();
+  await _baseLoadTrack(track, queue, index, autoplay);
+  state.playCounts[track.id] = (state.playCounts[track.id] || 0) + 1;
+  saveJson(AURA_PLAY_COUNT_KEY, state.playCounts);
+  if ('mediaSession' in navigator) updateMediaSession(track);
+};
+
+const _baseUpdateProgress = updateProgress;
+let _lastProgressSave = 0;
+updateProgress = function() {
+  _baseUpdateProgress();
+  if (Date.now() - _lastProgressSave > 1500) {
+    _lastProgressSave = Date.now();
+    saveTrackProgress();
+    savePlaybackState();
+  }
+};
+
+restorePlaybackState = async function() {
+  try {
+    const raw = localStorage.getItem('aurastream_playback');
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (!saved.track) return;
+    await loadTrack(saved.track, saved.queue || [saved.track], saved.queueIndex || 0, false);
+    audio.addEventListener('loadedmetadata', () => {
+      audio.currentTime = Math.min(saved.currentTime || 0, Math.max(0, (audio.duration || saved.track.duration || 0) - 1));
+    }, { once:true });
+    state.isPlaying = false;
+    syncPlayBtn();
+  } catch(e) {
+    console.log('Playback restore failed', e);
+  }
+};
+
+function rememberSearch(query) {
+  query = (query || '').trim();
+  if (!query) return;
+  state.recentSearches = [query, ...state.recentSearches.filter(q => q.toLowerCase() !== query.toLowerCase())].slice(0, 10);
+  saveJson(AURA_SEARCH_KEY, state.recentSearches);
+}
+
+function setDurationFilter(value) {
+  state.durationFilter = value;
+  localStorage.setItem('aurastream_duration_filter', value);
+  renderContent();
+}
+
+function filteredSearchResults() {
+  const results = state.searchResults || [];
+  if (state.durationFilter === 'short') return results.filter(t => (t.duration || 0) && t.duration < 180);
+  if (state.durationFilter === 'medium') return results.filter(t => !t.duration || (t.duration >= 180 && t.duration <= 420));
+  if (state.durationFilter === 'long') return results.filter(t => (t.duration || 0) > 420);
+  return results;
+}
+
+handleSearchInput = async function(val) {
+  state.searchQuery = val.trim();
+  clearTimeout(_searchTimeout);
+  clearTimeout(_suggestTimeout);
+  if (!state.searchQuery) {
+    state.searchResults = [];
+    renderSuggestions();
+    setViewSilent('search');
+    renderContent();
+    return;
+  }
+  if (state.searchQuery.includes('youtube.com') || state.searchQuery.includes('youtu.be')) {
+    const handled = await handleUrlIntent(state.searchQuery);
+    if (handled) {
+      const si = el('searchInput'); if (si) si.value = '';
+      hideSuggestions();
+      return;
+    }
+  }
+  setViewSilent('search');
+  _suggestTimeout = setTimeout(async () => {
+    try {
+      const res = await fetch(`${API}/api/suggest?q=${encodeURIComponent(state.searchQuery)}`);
+      const data = await res.json();
+      _suggestData = data.suggestions || [];
+      renderSuggestions();
+    } catch { renderSuggestions(); }
+  }, 180);
+  _searchTimeout = setTimeout(async () => {
+    rememberSearch(state.searchQuery);
+    hideSuggestions();
+    state.isSearching = true;
+    renderContent();
+    try {
+      const res = await fetch(`${API}/api/search?q=${encodeURIComponent(state.searchQuery)}&type=${encodeURIComponent(state.searchType)}&limit=30`);
+      const data = await res.json();
+      state.searchResults = data.results || [];
+    } catch {
+      showToast('Search failed - is the backend running?', true);
+      state.searchResults = [];
+    }
+    state.isSearching = false;
+    renderContent();
+  }, 460);
+};
+
+renderSuggestions = function() {
+  const box = el('searchSuggestions');
+  if (!box) return;
+  const chips = (label, items) => items.length ? `
+    <div class="suggestion-section">${label}</div>
+    <div class="suggestion-chip-row">${items.map(q => `<button class="suggestion-chip" onmousedown="runSearchChip('${esc(q)}')">${esc(q)}</button>`).join('')}</div>` : '';
+  const live = _suggestData.length ? `
+    <div class="suggestion-section">Suggestions</div>
+    ${_suggestData.map(s => `
+      <div class="suggestion-item" onmousedown="selectSuggestion('${esc(s.id)}','${esc(s.title)}')">
+        <img class="suggestion-thumb" src="https://i.ytimg.com/vi/${esc(s.id)}/default.jpg" onerror="this.style.opacity=.2" alt=""/>
+        <div class="suggestion-info">
+          <div class="suggestion-title">${esc(s.title)}</div>
+          <div class="suggestion-artist">${esc(s.artist)}</div>
+        </div>
+        <span class="suggestion-play-icon">▶</span>
+      </div>`).join('')}` : '';
+  box.innerHTML = chips('Trending', AURA_TRENDING.slice(0, 6)) + chips('Recent', state.recentSearches.slice(0, 6)) + live;
+  box.classList.toggle('visible', !!box.innerHTML);
+};
+
+function runSearchChip(query) {
+  const desktop = el('searchInput');
+  const mobile = el('mobileSearchInput');
+  if (desktop) desktop.value = query;
+  if (mobile) mobile.value = query;
+  handleSearchInput(query);
+}
+
+function startVoiceSearch() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return showToast('Voice search is not supported here', true);
+  const rec = new SpeechRecognition();
+  rec.lang = 'en-US';
+  rec.interimResults = false;
+  rec.onstart = () => showToast('Listening...');
+  rec.onerror = () => showToast('Could not hear that', true);
+  rec.onresult = e => runSearchChip(e.results?.[0]?.[0]?.transcript || '');
+  rec.start();
+}
+
+const _baseRenderSearch = renderSearch;
+renderSearch = function() {
+  const tools = `
+    <div class="search-tools">
+      <button class="search-tool-btn" onclick="startVoiceSearch()">Mic</button>
+      ${['all','songs','artists','albums','playlists'].map(type => `<button class="search-tool-btn ${state.searchType === type ? 'active' : ''}" onclick="setSearchType('${type}',this)">${type}</button>`).join('')}
+      <select class="sort-select" onchange="setDurationFilter(this.value)" title="Duration">
+        <option value="any" ${state.durationFilter === 'any' ? 'selected' : ''}>Any duration</option>
+        <option value="short" ${state.durationFilter === 'short' ? 'selected' : ''}>Under 3 min</option>
+        <option value="medium" ${state.durationFilter === 'medium' ? 'selected' : ''}>3-7 min</option>
+        <option value="long" ${state.durationFilter === 'long' ? 'selected' : ''}>7+ min</option>
+      </select>
+    </div>`;
+  if (!state.searchQuery && !state.isSearching) {
+    return `${tools}${renderSuggestionsPanel()}`;
+  }
+  const original = state.searchResults;
+  state.searchResults = filteredSearchResults();
+  const html = tools + _baseRenderSearch();
+  state.searchResults = original;
+  return html;
+};
+
+function renderSuggestionsPanel() {
+  return `
+    <div class="section-header"><span class="section-title">Search</span></div>
+    <div class="suggestion-chip-row">${AURA_TRENDING.map(q => `<button class="suggestion-chip" onclick="runSearchChip('${esc(q)}')">${esc(q)}</button>`).join('')}</div>
+    ${state.recentSearches.length ? `<div class="section-header"><span class="section-title">Recent Searches</span></div><div class="suggestion-chip-row">${state.recentSearches.map(q => `<button class="suggestion-chip" onclick="runSearchChip('${esc(q)}')">${esc(q)}</button>`).join('')}</div>` : ''}`;
+}
+
+function playlistCover(pl) {
+  const tracks = (pl.tracks || []).filter(t => t.thumbnail).slice(0, 4);
+  if (!tracks.length) return `<div class="track-row-thumb playlist-badge">${(pl.tracks || []).length}♫</div>`;
+  return `<div class="playlist-cover ${tracks.length === 1 ? 'single' : ''}">${tracks.map(t => `<img src="${esc(t.thumbnail)}" alt="" onerror="this.style.opacity=.1"/>`).join('')}</div>`;
+}
+
+function sortTracks(tracks) {
+  const copy = [...tracks];
+  const byArtist = (a,b) => (a.artist || '').localeCompare(b.artist || '');
+  const byDuration = (a,b) => (a.duration || 0) - (b.duration || 0);
+  const byPlayed = (a,b) => (state.playCounts[b.id] || 0) - (state.playCounts[a.id] || 0);
+  if (state.trackSort === 'oldest') return copy.reverse();
+  if (state.trackSort === 'artist') return copy.sort(byArtist);
+  if (state.trackSort === 'duration') return copy.sort(byDuration);
+  if (state.trackSort === 'mostPlayed') return copy.sort(byPlayed);
+  return copy;
+}
+
+function smartPlaylists() {
+  const hour = new Date().getHours();
+  return [
+    { id:'smart_recent', name:'Recently played', tracks: state.history.slice(0, 50), smart:true },
+    { id:'smart_most', name:'Most played', tracks: [...state.history, ...state.likedTracks].filter((t,i,a) => a.findIndex(x => x.id === t.id) === i).sort((a,b) => (state.playCounts[b.id] || 0) - (state.playCounts[a.id] || 0)).slice(0, 50), smart:true },
+    { id:'smart_chill', name:'Chill songs', tracks: [...state.history, ...state.likedTracks].filter(t => /chill|lofi|calm|acoustic|slow|sleep/i.test(`${t.title} ${t.artist}`)).slice(0, 50), smart:true },
+    { id:'smart_night', name:'Night vibes', tracks: [...state.history, ...state.likedTracks].filter(t => /night|moon|dark|after|drive|lofi|ambient/i.test(`${t.title} ${t.artist}`) || hour >= 20 || hour < 5).slice(0, 50), smart:true },
+  ].filter(pl => pl.tracks.length);
+}
+
+function sortedPlaylists() {
+  const user = [...state.playlists];
+  user.sort((a,b) => {
+    const pin = Number(state.pinnedPlaylists.has(b.id)) - Number(state.pinnedPlaylists.has(a.id));
+    if (state.playlistSort === 'pinned' && pin) return pin;
+    if (state.playlistSort === 'oldest') return (a.createdAt || 0) - (b.createdAt || 0);
+    if (state.playlistSort === 'artist') return (a.tracks?.[0]?.artist || a.name).localeCompare(b.tracks?.[0]?.artist || b.name);
+    if (state.playlistSort === 'duration') return playlistDuration(a) - playlistDuration(b);
+    if (state.playlistSort === 'mostPlayed') return playlistPlayScore(b) - playlistPlayScore(a);
+    return (b.createdAt || 0) - (a.createdAt || 0);
+  });
+  return [...smartPlaylists(), ...user];
+}
+
+function playlistDuration(pl) {
+  return (pl.tracks || []).reduce((sum,t) => sum + (t.duration || 0), 0);
+}
+
+function playlistPlayScore(pl) {
+  return (pl.tracks || []).reduce((sum,t) => sum + (state.playCounts[t.id] || 0), 0);
+}
+
+function setPlaylistSort(value) {
+  state.playlistSort = value;
+  localStorage.setItem('aurastream_playlist_sort', value);
+  renderContent();
+}
+
+function setTrackSort(value) {
+  state.trackSort = value;
+  localStorage.setItem('aurastream_track_sort', value);
+  renderContent();
+}
+
+async function togglePinPlaylist(id) {
+  if (state.pinnedPlaylists.has(id)) state.pinnedPlaylists.delete(id);
+  else state.pinnedPlaylists.add(id);
+  saveJson(AURA_PIN_KEY, [...state.pinnedPlaylists]);
+  haptic();
+  renderContent();
+}
+
+renderPlaylists = function() {
+  const playlists = sortedPlaylists();
+  return `
+    <div class="section-header">
+      <span class="section-title">Playlists</span>
+      <div>
+        <select class="sort-select" onchange="setPlaylistSort(this.value)">
+          <option value="pinned" ${state.playlistSort === 'pinned' ? 'selected' : ''}>Pinned first</option>
+          <option value="newest" ${state.playlistSort === 'newest' ? 'selected' : ''}>Newest</option>
+          <option value="oldest" ${state.playlistSort === 'oldest' ? 'selected' : ''}>Oldest</option>
+          <option value="artist" ${state.playlistSort === 'artist' ? 'selected' : ''}>Artist</option>
+          <option value="duration" ${state.playlistSort === 'duration' ? 'selected' : ''}>Duration</option>
+          <option value="mostPlayed" ${state.playlistSort === 'mostPlayed' ? 'selected' : ''}>Most played</option>
+        </select>
+        <button class="db-btn accent" onclick="createPlaylistPrompt()">New Playlist</button>
+      </div>
+    </div>
+    ${!playlists.length ? `<div class="empty-state"><div class="empty-icon">♫</div><div class="empty-title">No playlists yet</div></div>` : `
+    <div class="track-list">
+      ${playlists.map((pl, idx) => `
+        <div class="track-row" onclick="playPlaylist('${pl.id}')">
+          <div class="track-row-num">${pl.smart ? '★' : idx + 1}</div>
+          ${playlistCover(pl)}
+          <div class="track-row-info">
+            <div class="title">${esc(pl.name)}</div>
+            <div class="artist">${pl.tracks.length} track${pl.tracks.length === 1 ? '' : 's'}${pl.smart ? ' · smart' : ''}</div>
+          </div>
+          <div class="track-row-dur">${fmtTime(playlistDuration(pl))}</div>
+          ${pl.smart ? `<span></span>` : `<button class="track-row-like playlist-pin ${state.pinnedPlaylists.has(pl.id) ? 'pinned' : ''}" onclick="event.stopPropagation();togglePinPlaylist('${pl.id}')">⌃</button>`}
+        </div>`).join('')}
+    </div>`}`;
+};
+
+playPlaylist = async function(id) {
+  const pl = [...smartPlaylists(), ...state.playlists].find(p => p.id === id);
+  if (!pl) return showToast('Playlist not found', true);
+  const tracks = sortTracks(pl.tracks || []);
+  if (!tracks.length) return showToast('Playlist is empty', true);
+  await loadTrack(tracks[0], tracks, 0, true);
+  closeMobilePlayer();
+};
+
+function selectedTracks() {
+  const all = [...state.searchResults, ...state.likedTracks, ...state.history, ...state.queue];
+  return [...state.selectedTrackIds].map(id => all.find(t => t.id === id) || _trackMap.get(id)).filter(Boolean);
+}
+
+function toggleSelectTrack(id) {
+  if (state.selectedTrackIds.has(id)) state.selectedTrackIds.delete(id);
+  else state.selectedTrackIds.add(id);
+  haptic(8);
+  renderContent();
+}
+
+async function addSelectedToPlaylist() {
+  const tracks = selectedTracks();
+  if (!tracks.length) return;
+  const name = prompt('Add selected songs to playlist:');
+  if (!name) return;
+  let pl = state.playlists.find(p => p.name.toLowerCase() === name.trim().toLowerCase());
+  if (!pl) {
+    pl = { id:'pl_' + Date.now(), name:name.trim(), tracks:[], createdAt:Date.now() };
+    state.playlists.push(pl);
+  }
+  tracks.forEach(t => { if (!pl.tracks.some(x => x.id === t.id)) pl.tracks.push(t); });
+  await dbPut('playlists', pl);
+  state.selectedTrackIds.clear();
+  showToast(`Added ${tracks.length} songs to ${pl.name}`);
+  renderContent();
+}
+
+function clearSelection() {
+  state.selectedTrackIds.clear();
+  renderContent();
+}
+
+function renderSelectionBar() {
+  const n = state.selectedTrackIds.size;
+  if (!n) return '';
+  return `<div class="selection-bar"><span>${n} selected</span><button class="search-tool-btn" onclick="addSelectedToPlaylist()">Add to playlist</button><button class="search-tool-btn" onclick="clearSelection()">Clear</button></div>`;
+}
+
+const _baseRenderTrackRow = renderTrackRow;
+renderTrackRow = function(track, queue, index) {
+  const row = _baseRenderTrackRow(track, queue, index);
+  return row.replace(/<div class="track-row-num">.*?<\/div>/s, `<div class="track-row-num"><input class="multi-check" type="checkbox" ${state.selectedTrackIds.has(track.id) ? 'checked' : ''} onclick="event.stopPropagation();toggleSelectTrack('${esc(track.id)}')"/></div>`);
+};
+
+const _baseRenderLiked = renderLiked;
+renderLiked = function() {
+  const original = state.likedTracks;
+  state.likedTracks = sortTracks(original);
+  const html = renderSelectionBar() + sortControlHtml() + _baseRenderLiked();
+  state.likedTracks = original;
+  return html;
+};
+
+const _baseRenderHistory = renderHistory;
+renderHistory = function() {
+  const original = state.history;
+  state.history = sortTracks(original);
+  const html = renderSelectionBar() + sortControlHtml() + _baseRenderHistory();
+  state.history = original;
+  return html;
+};
+
+function sortControlHtml() {
+  return `<div class="search-tools"><select class="sort-select" onchange="setTrackSort(this.value)">
+    <option value="newest" ${state.trackSort === 'newest' ? 'selected' : ''}>Newest</option>
+    <option value="oldest" ${state.trackSort === 'oldest' ? 'selected' : ''}>Oldest</option>
+    <option value="artist" ${state.trackSort === 'artist' ? 'selected' : ''}>Artist</option>
+    <option value="duration" ${state.trackSort === 'duration' ? 'selected' : ''}>Duration</option>
+    <option value="mostPlayed" ${state.trackSort === 'mostPlayed' ? 'selected' : ''}>Most played</option>
+  </select></div>`;
+}
+
+function initMobileGestures() {
+  const player = el('mobilePlayerPage');
+  if (!player || player.dataset.gesturesReady) return;
+  player.dataset.gesturesReady = '1';
+  let sx = 0, sy = 0;
+  player.addEventListener('touchstart', e => {
+    sx = e.touches[0].clientX;
+    sy = e.touches[0].clientY;
+  }, { passive:true });
+  player.addEventListener('touchend', e => {
+    const t = e.changedTouches[0];
+    const dx = t.clientX - sx;
+    const dy = t.clientY - sy;
+    if (Math.abs(dy) > 90 && dy > Math.abs(dx)) { haptic(); closeMobilePlayer(); return; }
+    if (Math.abs(dx) > 80 && Math.abs(dx) > Math.abs(dy)) {
+      haptic();
+      if (dx < 0) nextTrack(); else prevTrack();
+    }
+  }, { passive:true });
+}
+
+function initPullToRefresh() {
+  if (document.body.dataset.pullReady) return;
+  document.body.dataset.pullReady = '1';
+  const indicator = document.createElement('div');
+  indicator.className = 'pull-refresh';
+  indicator.textContent = 'Release to refresh';
+  document.body.appendChild(indicator);
+  let startY = 0, armed = false;
+  const main = document.querySelector('.main');
+  document.addEventListener('touchstart', e => {
+    if (!isMobile() || (main && main.scrollTop > 0)) return;
+    startY = e.touches[0].clientY;
+    armed = false;
+  }, { passive:true });
+  document.addEventListener('touchmove', e => {
+    if (!isMobile() || !startY) return;
+    const dy = e.touches[0].clientY - startY;
+    armed = dy > 80;
+    indicator.classList.toggle('visible', armed);
+  }, { passive:true });
+  document.addEventListener('touchend', () => {
+    if (armed) refreshCurrentView();
+    indicator.classList.remove('visible');
+    startY = 0;
+    armed = false;
+  }, { passive:true });
+}
+
+function refreshCurrentView() {
+  haptic();
+  if (state.searchQuery) handleSearchInput(state.searchQuery);
+  else renderContent();
+  showToast('Refreshed');
+}
+
+function initBackgroundPlayback() {
+  audio.preload = 'auto';
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) savePlaybackState();
+  });
+}
+
+const _baseOpenMobilePlayer = openMobilePlayer;
+openMobilePlayer = function() {
+  _baseOpenMobilePlayer();
+  initMobileGestures();
+};
+
+initMobileGestures();
+initPullToRefresh();
+initBackgroundPlayback();
+audio.addEventListener('timeupdate', () => {
+  if (Date.now() - _lastProgressSave > 1500) {
+    _lastProgressSave = Date.now();
+    saveTrackProgress();
+    savePlaybackState();
+  }
+});
+window.addEventListener('beforeunload', saveTrackProgress);
 
 </script>
 </body>
