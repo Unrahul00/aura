@@ -2442,7 +2442,6 @@ async function init() {
   await restoreQueue();
 }
 
-init();
 
 
 // ══════════════════════════════════════════════════════════════════
@@ -3006,26 +3005,6 @@ function closeMobileSearch() {
 
 
 
-function openMobileSearch() {
-  const overlay = document.getElementById('mobileSearchOverlay');
-  if (overlay) overlay.classList.add('open');
-
-  const input = document.getElementById('mobileSearchInput');
-  if (input) {
-    setTimeout(() => input.focus(), 100);
-  }
-}
-
-function closeMobileSearch() {
-  const overlay = document.getElementById('mobileSearchOverlay');
-  if (overlay) overlay.classList.remove('open');
-}
-
-function mobileTabSearch(btn) {
-  document.querySelectorAll('.mobile-tab-btn').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  openMobileSearch();
-}
 
 
 // ── Playback Persistence ─────────────────────────────
@@ -3620,6 +3599,9 @@ audio.addEventListener('timeupdate', () => {
   }
 });
 window.addEventListener('beforeunload', saveTrackProgress);
+
+// Start after feature augmentations are registered so the first render uses them.
+init();
 
 </script>
 </body>
