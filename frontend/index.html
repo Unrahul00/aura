@@ -475,8 +475,8 @@ input{font-family:inherit}
 // ═══════════════════════════════════════════════════════════════════
 
 const API = window.location.protocol.startsWith('http')
-  ? `${window.location.origin}/api`
-  : 'http://127.0.0.1:8000/api';
+  ? window.location.origin
+  : 'http://127.0.0.1:8000';
 
 // ── 1. IndexedDB Setup ──────────────────────────────────────────────
 
