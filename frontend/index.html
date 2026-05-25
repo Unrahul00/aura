@@ -2953,9 +2953,6 @@ window.addEventListener('resize', applyMobileLayout);
 function mobileTabSearch(btnEl) {
   // Mark search tab as active
   document.querySelectorAll('.mobile-tab-btn').forEach(b => b.classList.toggle('active', b === btnEl));
-  openMobileSearch();
-}
-
 
   const overlay = el('mobileSearchOverlay');
   if (overlay) {
