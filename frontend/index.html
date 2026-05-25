@@ -591,6 +591,38 @@ input{font-family:inherit}
 .selection-bar span{font-size:12px;color:var(--text-muted);font-family:var(--mono)}
 .pull-refresh{position:fixed;top:10px;left:50%;transform:translateX(-50%) translateY(-70px);background:var(--surface);border:1px solid var(--border-lit);border-radius:999px;padding:9px 16px;font:12px var(--mono);color:var(--accent);z-index:220;transition:transform .2s}
 .pull-refresh.visible{transform:translateX(-50%) translateY(0)}
+.detail-hero{display:flex;align-items:end;gap:18px;padding:22px 0 10px}
+.detail-cover{width:128px;height:128px;border-radius:12px;overflow:hidden;background:var(--surface2);display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;flex-shrink:0}
+.detail-cover img{width:100%;height:100%;object-fit:cover}
+.detail-info{min-width:0}
+.detail-kicker{font:11px var(--mono);letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+.detail-title{font-size:32px;font-weight:800;letter-spacing:-.6px;line-height:1.05}
+.detail-meta{font-size:13px;color:var(--text-muted);margin-top:8px}
+.inline-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:14px 0}
+.mini-btn{height:32px;border-radius:999px;border:1px solid var(--border);background:var(--surface2);color:var(--text-muted);padding:0 12px;font-size:12px;font-weight:700}
+.mini-btn:hover,.mini-btn.accent{border-color:var(--accent);color:var(--accent)}
+.queue-drawer{position:fixed;right:0;top:0;bottom:var(--player-h);width:360px;max-width:100vw;background:rgba(10,10,15,.98);border-left:1px solid var(--border);z-index:120;transform:translateX(100%);transition:transform .25s ease;display:flex;flex-direction:column}
+.queue-drawer.open{transform:translateX(0)}
+.queue-header{display:flex;align-items:center;justify-content:space-between;padding:18px 18px 12px;border-bottom:1px solid var(--border)}
+.queue-title{font-size:15px;font-weight:800}
+.queue-body{overflow-y:auto;padding:8px}
+.queue-row{display:grid;grid-template-columns:28px 40px 1fr auto;align-items:center;gap:10px;padding:8px;border-radius:8px}
+.queue-row:hover{background:var(--surface2)}
+.queue-row.current{background:rgba(200,245,66,.08)}
+.queue-actions{display:flex;gap:4px}
+.cache-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.cache-card{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;gap:10px;align-items:center;min-width:0}
+.cache-card img{width:48px;height:48px;border-radius:8px;object-fit:cover;background:var(--surface)}
+.status-pill{position:fixed;right:14px;top:14px;z-index:80;border:1px solid var(--border);border-radius:999px;background:rgba(17,17,24,.92);padding:7px 11px;font:11px var(--mono);color:var(--text-muted);backdrop-filter:blur(14px)}
+.status-pill.ok{color:var(--accent);border-color:rgba(200,245,66,.35)}
+.status-pill.bad{color:#ff6b6b;border-color:rgba(255,107,107,.45)}
+.offline-banner{display:none;background:#2a1018;border:1px solid rgba(255,107,107,.35);color:#ffb3b3;border-radius:10px;padding:10px 12px;font-size:13px;margin:10px 0}
+.offline-banner.visible{display:block}
+.app-version{font:11px var(--mono);color:var(--text-dim);padding:10px 22px 0}
+.bulk-sheet{position:fixed;left:0;right:0;bottom:0;z-index:260;background:var(--surface);border-top:1px solid var(--border-lit);border-radius:20px 20px 0 0;transform:translateY(110%);transition:transform .22s ease;max-height:70vh;overflow:auto}
+.bulk-sheet.open{transform:translateY(0)}
+.bulk-sheet-header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border)}
+@media(max-width:768px){.detail-hero{align-items:center}.detail-cover{width:92px;height:92px}.detail-title{font-size:24px}.queue-drawer{width:100%;bottom:0}.status-pill{top:auto;bottom:72px;right:10px}}
 
 /* Lyrics Fullscreen */
 .lyrics-fullscreen{position:fixed;inset:0;z-index:300;background:rgba(6,6,10,0.97);backdrop-filter:blur(32px);display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .3s}
@@ -3599,6 +3631,428 @@ audio.addEventListener('timeupdate', () => {
   }
 });
 window.addEventListener('beforeunload', saveTrackProgress);
+
+// ---- Feature Pack 2: detail pages, queue/cache managers, homelab status ----
+const AURA_APP_VERSION = '2026.05.25-homelab';
+Object.assign(state, {
+  selectedPlaylistId: null,
+  queueDrawerOpen: false,
+  backendOnline: null,
+  cacheEntries: [],
+});
+
+function findPlaylistById(id) {
+  return [...smartPlaylists(), ...state.playlists].find(pl => pl.id === id);
+}
+
+function openPlaylistDetail(id) {
+  state.selectedPlaylistId = id;
+  setViewSilent('playlistDetail');
+  renderContent();
+}
+
+function renderCoverFromTracks(tracks, className = 'detail-cover') {
+  const thumbs = (tracks || []).filter(t => t.thumbnail).slice(0, 4);
+  if (!thumbs.length) return `<div class="${className} playlist-badge">${(tracks || []).length}♫</div>`;
+  return `<div class="${className}">${thumbs.map(t => `<img src="${esc(t.thumbnail)}" alt="" onerror="this.style.opacity=.1"/>`).join('')}</div>`;
+}
+
+function renderPlaylistDetail() {
+  const pl = findPlaylistById(state.selectedPlaylistId);
+  if (!pl) return `<div class="empty-state"><div class="empty-title">Playlist not found</div><button class="db-btn" onclick="setView('playlists',null)">Back</button></div>`;
+  const tracks = sortTracks(pl.tracks || []);
+  const isUser = !pl.smart;
+  return `
+    <button class="section-more" onclick="setView('playlists',null)">← Back to playlists</button>
+    <div class="detail-hero">
+      ${renderCoverFromTracks(pl.tracks)}
+      <div class="detail-info">
+        <div class="detail-kicker">${pl.smart ? 'Smart playlist' : 'Playlist'}</div>
+        <div class="detail-title">${esc(pl.name)}</div>
+        <div class="detail-meta">${pl.tracks.length} tracks · ${fmtTime(playlistDuration(pl))}</div>
+        <div class="inline-actions">
+          <button class="mini-btn accent" onclick="playPlaylist('${esc(pl.id)}')">Play</button>
+          ${isUser ? `<button class="mini-btn" onclick="renamePlaylist('${esc(pl.id)}')">Rename</button>` : ''}
+          ${isUser ? `<button class="mini-btn" onclick="togglePinPlaylist('${esc(pl.id)}')">${state.pinnedPlaylists.has(pl.id) ? 'Unpin' : 'Pin'}</button>` : ''}
+        </div>
+      </div>
+    </div>
+    ${!tracks.length ? `<div class="empty-state"><div class="empty-title">No songs here yet</div></div>` : `
+      <div class="track-list">
+        ${tracks.map((t,i) => `
+          <div class="track-row ${state.currentTrack?.id === t.id ? 'playing' : ''}" onclick="loadTrackFromPlaylistDetail('${esc(pl.id)}','${esc(t.id)}')">
+            <div class="track-row-num">${i + 1}</div>
+            <img class="track-row-thumb" src="${esc(t.thumbnail || '')}" alt="" onerror="this.style.opacity=.1"/>
+            <div class="track-row-info"><div class="title">${esc(t.title)}</div><div class="artist">${esc(t.artist)}</div></div>
+            <span class="track-row-dur">${t.duration ? fmtTime(t.duration) : ''}</span>
+            ${isUser ? `<div class="queue-actions">
+              <button class="mini-btn" onclick="event.stopPropagation();movePlaylistTrack('${esc(pl.id)}','${esc(t.id)}',-1)">↑</button>
+              <button class="mini-btn" onclick="event.stopPropagation();movePlaylistTrack('${esc(pl.id)}','${esc(t.id)}',1)">↓</button>
+              <button class="mini-btn" onclick="event.stopPropagation();removePlaylistTrack('${esc(pl.id)}','${esc(t.id)}')">Remove</button>
+            </div>` : `<span></span>`}
+          </div>`).join('')}
+      </div>`}`;
+}
+
+async function loadTrackFromPlaylistDetail(playlistId, trackId) {
+  const pl = findPlaylistById(playlistId);
+  if (!pl) return;
+  const tracks = sortTracks(pl.tracks || []);
+  const idx = tracks.findIndex(t => t.id === trackId);
+  if (idx >= 0) await loadTrack(tracks[idx], tracks, idx, true);
+}
+
+async function renamePlaylist(id) {
+  const pl = state.playlists.find(p => p.id === id);
+  if (!pl) return;
+  const name = prompt('Rename playlist:', pl.name);
+  if (!name || !name.trim()) return;
+  pl.name = name.trim();
+  await dbPut('playlists', pl);
+  showToast('Playlist renamed');
+  renderContent();
+}
+
+async function removePlaylistTrack(playlistId, trackId) {
+  const pl = state.playlists.find(p => p.id === playlistId);
+  if (!pl) return;
+  pl.tracks = (pl.tracks || []).filter(t => t.id !== trackId);
+  await dbPut('playlists', pl);
+  showToast('Removed from playlist');
+  renderContent();
+}
+
+async function movePlaylistTrack(playlistId, trackId, dir) {
+  const pl = state.playlists.find(p => p.id === playlistId);
+  if (!pl) return;
+  const i = pl.tracks.findIndex(t => t.id === trackId);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= pl.tracks.length) return;
+  [pl.tracks[i], pl.tracks[j]] = [pl.tracks[j], pl.tracks[i]];
+  await dbPut('playlists', pl);
+  haptic(8);
+  renderContent();
+}
+
+function renderContinuePage() {
+  const items = getContinueItems(100);
+  return `
+    <div class="section-header">
+      <span class="section-title">Continue Listening</span>
+      <span class="section-count">${items.length}</span>
+      ${items.length ? `<button class="section-more" onclick="clearAllContinue()">Clear all</button>` : ''}
+    </div>
+    ${!items.length ? `<div class="empty-state"><div class="empty-title">Nothing unfinished</div></div>` : `
+      <div class="track-list">${items.map((p,i) => {
+        const pct = p.duration ? Math.min(100, (p.currentTime / p.duration) * 100) : 0;
+        return `<div class="track-row" onclick="resumeProgressTrack('${esc(p.track.id)}')">
+          <div class="track-row-num">${i + 1}</div>
+          <img class="track-row-thumb" src="${esc(p.track.thumbnail || '')}" alt="" onerror="this.style.opacity=.1"/>
+          <div class="track-row-info"><div class="title">${esc(p.track.title)}</div><div class="artist">${fmtTime(p.currentTime)}${p.duration ? ` / ${fmtTime(p.duration)}` : ''}<div class="continue-progress"><span style="width:${pct}%"></span></div></div></div>
+          <span class="track-row-dur">${Math.round(pct)}%</span>
+          <button class="mini-btn" onclick="event.stopPropagation();removeContinueItem('${esc(p.track.id)}')">Remove</button>
+        </div>`;
+      }).join('')}</div>`}`;
+}
+
+function removeContinueItem(id) {
+  const progress = getTrackProgress();
+  delete progress[id];
+  saveJson(AURA_PROGRESS_KEY, progress);
+  renderContent();
+}
+
+function clearAllContinue() {
+  saveJson(AURA_PROGRESS_KEY, {});
+  renderContent();
+}
+
+const _homeWithContinue = renderHome;
+renderHome = function() {
+  return _homeWithContinue().replace(
+    '<span class="section-title">Continue Listening</span>',
+    `<span class="section-title">Continue Listening</span><button class="section-more" onclick="setView('continue',null)">See all →</button>`
+  );
+};
+
+function renderQueueDrawer() {
+  let drawer = el('queueDrawer');
+  if (!drawer) {
+    drawer = document.createElement('div');
+    drawer.id = 'queueDrawer';
+    drawer.className = 'queue-drawer';
+    document.body.appendChild(drawer);
+  }
+  drawer.classList.toggle('open', state.queueDrawerOpen);
+  drawer.innerHTML = `
+    <div class="queue-header">
+      <div><div class="queue-title">Queue</div><div class="detail-meta">${state.queue.length} tracks</div></div>
+      <button class="mini-btn" onclick="toggleQueueDrawer(false)">Close</button>
+    </div>
+    <div class="queue-body">
+      ${!state.queue.length ? `<div class="empty-state"><div class="empty-title">Queue is empty</div></div>` : state.queue.map((t,i) => `
+        <div class="queue-row ${i === state.queueIndex ? 'current' : ''}" onclick="loadTrack(state.queue[${i}],state.queue,${i},true)">
+          <div class="track-row-num">${i + 1}</div>
+          <img class="track-row-thumb" src="${esc(t.thumbnail || '')}" alt="" onerror="this.style.opacity=.1"/>
+          <div class="track-row-info"><div class="title">${esc(t.title)}</div><div class="artist">${esc(t.artist)}</div></div>
+          <div class="queue-actions">
+            <button class="mini-btn" onclick="event.stopPropagation();moveQueueTrack(${i},-1)">↑</button>
+            <button class="mini-btn" onclick="event.stopPropagation();moveQueueTrack(${i},1)">↓</button>
+            <button class="mini-btn" onclick="event.stopPropagation();removeQueueTrack(${i})">×</button>
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function toggleQueueDrawer(force) {
+  state.queueDrawerOpen = typeof force === 'boolean' ? force : !state.queueDrawerOpen;
+  renderQueueDrawer();
+}
+
+function moveQueueTrack(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= state.queue.length) return;
+  [state.queue[i], state.queue[j]] = [state.queue[j], state.queue[i]];
+  if (state.queueIndex === i) state.queueIndex = j;
+  else if (state.queueIndex === j) state.queueIndex = i;
+  persistQueue();
+  renderQueueDrawer();
+}
+
+function removeQueueTrack(i) {
+  if (i < 0 || i >= state.queue.length) return;
+  state.queue.splice(i, 1);
+  if (state.queueIndex > i) state.queueIndex--;
+  if (state.queueIndex >= state.queue.length) state.queueIndex = state.queue.length - 1;
+  persistQueue();
+  renderQueueDrawer();
+}
+
+async function loadCacheEntries() {
+  try { state.cacheEntries = db ? await dbGetAll('cached_tracks') : []; } catch { state.cacheEntries = []; }
+}
+
+function cacheSizeLabel(bytes) {
+  if (!bytes) return '0 MB';
+  return bytes > 1024 * 1024 * 1024 ? `${(bytes/1024/1024/1024).toFixed(1)} GB` : `${(bytes/1024/1024).toFixed(1)} MB`;
+}
+
+async function renderOfflineViewAsync() {
+  await loadCacheEntries();
+  renderContent();
+}
+
+function renderOffline() {
+  const total = state.cacheEntries.reduce((sum,e) => sum + (e.size || 0), 0);
+  return `
+    <div class="section-header">
+      <span class="section-title">Offline Cache</span>
+      <span class="section-count">${state.cacheEntries.length} tracks · ${cacheSizeLabel(total)}</span>
+      <button class="section-more" onclick="renderOfflineViewAsync()">Refresh</button>
+    </div>
+    <div class="inline-actions"><button class="mini-btn" onclick="clearAudioCache().then(()=>renderOfflineViewAsync())">Clear all cache</button></div>
+    ${!state.cacheEntries.length ? `<div class="empty-state"><div class="empty-title">No cached tracks yet</div><div class="empty-sub">Tracks cache after playback starts.</div></div>` : `
+      <div class="cache-grid">${state.cacheEntries.map(e => {
+        const t = e.meta || {};
+        return `<div class="cache-card">
+          <img src="${esc(t.thumbnail || '')}" alt="" onerror="this.style.opacity=.1"/>
+          <div class="track-row-info"><div class="title">${esc(t.title || e.id)}</div><div class="artist">${cacheSizeLabel(e.size)} · ${e.cachedAt ? new Date(e.cachedAt).toLocaleDateString() : ''}</div></div>
+          <button class="mini-btn" onclick="deleteCachedTrack('${esc(e.id)}')">Remove</button>
+        </div>`;
+      }).join('')}</div>`}`;
+}
+
+async function deleteCachedTrack(id) {
+  await dbDelete('cached_tracks', id);
+  await loadCacheEntries();
+  showToast('Cached track removed');
+  renderContent();
+}
+
+function clearRecentSearch(query) {
+  state.recentSearches = state.recentSearches.filter(q => q !== query);
+  saveJson(AURA_SEARCH_KEY, state.recentSearches);
+  renderContent();
+}
+
+function clearAllRecentSearches() {
+  state.recentSearches = [];
+  saveJson(AURA_SEARCH_KEY, []);
+  renderContent();
+}
+
+const _suggestionsPanelWithHistory = renderSuggestionsPanel;
+renderSuggestionsPanel = function() {
+  return `
+    <div class="section-header"><span class="section-title">Search</span></div>
+    <div class="suggestion-chip-row">${AURA_TRENDING.map(q => `<button class="suggestion-chip" onclick="runSearchChip('${esc(q)}')">${esc(q)}</button>`).join('')}</div>
+    ${state.recentSearches.length ? `<div class="section-header"><span class="section-title">Recent Searches</span><button class="section-more" onclick="clearAllRecentSearches()">Clear all</button></div>
+      <div class="track-list">${state.recentSearches.map(q => `<div class="track-row" onclick="runSearchChip('${esc(q)}')"><div class="track-row-num">⌕</div><div class="track-row-info"><div class="title">${esc(q)}</div><div class="artist">Recent search</div></div><span></span><button class="mini-btn" onclick="event.stopPropagation();clearRecentSearch('${esc(q)}')">Remove</button></div>`).join('')}</div>` : ''}`;
+};
+
+const _featureRenderContent2 = renderContent;
+renderContent = function() {
+  const c = el('content');
+  if (!c) return;
+  if (state.view === 'playlistDetail') c.innerHTML = renderPlaylistDetail();
+  else if (state.view === 'continue') c.innerHTML = renderContinuePage();
+  else if (state.view === 'offline') c.innerHTML = renderOffline();
+  else _featureRenderContent2();
+  if (state.backendOnline === false && !c.querySelector('.offline-banner')) {
+    c.insertAdjacentHTML('afterbegin', `<div class="offline-banner visible">Backend is offline. Library, cache, and local playlist features still work, but search and streaming need the homelab API.</div>`);
+  }
+  if (state.view === 'offline' && !state.cacheEntriesLoaded) {
+    state.cacheEntriesLoaded = true;
+    renderOfflineViewAsync();
+  }
+};
+
+const _playlistsWithDetails = renderPlaylists;
+renderPlaylists = function() {
+  const html = _playlistsWithDetails();
+  return html
+    .replaceAll('onclick="playPlaylist(', 'onclick="openPlaylistDetail(')
+    .replace(/<div class="track-row" onclick="openPlaylistDetail\('([^']+)'\)">/g, `<div class="track-row" data-pl-id="$1" onclick="openPlaylistDetail('$1')">`);
+};
+
+function improvedSmartPlaylists() {
+  const unique = [...state.history, ...state.likedTracks].filter((t,i,a) => a.findIndex(x => x.id === t.id) === i);
+  const nowHour = new Date().getHours();
+  const nightWindow = nowHour >= 20 || nowHour < 5;
+  const mostPlayed = [...unique].sort((a,b) => (state.playCounts[b.id] || 0) - (state.playCounts[a.id] || 0)).filter(t => (state.playCounts[t.id] || 0) > 0).slice(0, 50);
+  const chill = unique.filter(t => {
+    const text = `${t.title} ${t.artist}`.toLowerCase();
+    const duration = t.duration || 0;
+    return /chill|lofi|calm|acoustic|slow|sleep|ambient|piano|rain/.test(text) || (duration >= 150 && duration <= 360 && (state.playCounts[t.id] || 0) >= 2);
+  }).slice(0, 50);
+  const night = unique.filter(t => {
+    const text = `${t.title} ${t.artist}`.toLowerCase();
+    return /night|moon|dark|after|drive|late|ambient|lofi/.test(text) || (nightWindow && (state.playCounts[t.id] || 0) > 0);
+  }).slice(0, 50);
+  return [
+    { id:'smart_recent', name:'Recently played', tracks: state.history.slice(0, 50), smart:true },
+    { id:'smart_most', name:'Most played', tracks: mostPlayed, smart:true },
+    { id:'smart_chill', name:'Chill songs', tracks: chill, smart:true },
+    { id:'smart_night', name:'Night vibes', tracks: night, smart:true },
+  ].filter(pl => pl.tracks.length);
+}
+smartPlaylists = improvedSmartPlaylists;
+
+const _trackCardWithData = renderTrackCard;
+renderTrackCard = function(track, queue, index) {
+  return _trackCardWithData(track, queue, index).replace('class="track-card', `data-track-id="${esc(track.id)}" class="track-card`);
+};
+
+const _trackRowWithData = renderTrackRow;
+renderTrackRow = function(track, queue, index) {
+  return _trackRowWithData(track, queue, index).replace('class="track-row', `data-track-id="${esc(track.id)}" class="track-row`);
+};
+
+function openBulkPlaylistPicker() {
+  const tracks = selectedTracks();
+  if (!tracks.length) return;
+  let sheet = el('bulkPlaylistSheet');
+  if (!sheet) {
+    sheet = document.createElement('div');
+    sheet.id = 'bulkPlaylistSheet';
+    sheet.className = 'bulk-sheet';
+    document.body.appendChild(sheet);
+  }
+  sheet.innerHTML = `
+    <div class="bulk-sheet-header"><strong>Add ${tracks.length} songs</strong><button class="mini-btn" onclick="closeBulkPlaylistPicker()">Close</button></div>
+    <div class="playlist-card-list">
+      ${state.playlists.map(pl => `<div class="playlist-card-item" onclick="addSelectedToPlaylistId('${esc(pl.id)}')"><span class="playlist-card-item-name">${esc(pl.name)}</span><span class="playlist-card-item-count">${pl.tracks.length} tracks</span></div>`).join('')}
+      <div class="playlist-card-footer"><div class="playlist-card-new"><input class="playlist-card-new-input" id="bulkNewPlaylistName" placeholder="New playlist name"/><button class="playlist-card-save" onclick="createPlaylistFromBulk()">Create</button></div></div>
+    </div>`;
+  sheet.classList.add('open');
+}
+
+function closeBulkPlaylistPicker() {
+  el('bulkPlaylistSheet')?.classList.remove('open');
+}
+
+async function addSelectedToPlaylistId(id) {
+  const tracks = selectedTracks();
+  const pl = state.playlists.find(p => p.id === id);
+  if (!pl) return;
+  tracks.forEach(t => { if (!pl.tracks.some(x => x.id === t.id)) pl.tracks.push(t); });
+  await dbPut('playlists', pl);
+  state.selectedTrackIds.clear();
+  closeBulkPlaylistPicker();
+  showToast(`Added ${tracks.length} songs to ${pl.name}`);
+  renderContent();
+}
+
+async function createPlaylistFromBulk() {
+  const name = el('bulkNewPlaylistName')?.value?.trim();
+  if (!name) return;
+  const pl = { id:'pl_' + Date.now(), name, tracks:[], createdAt:Date.now() };
+  state.playlists.push(pl);
+  await addSelectedToPlaylistId(pl.id);
+}
+
+addSelectedToPlaylist = openBulkPlaylistPicker;
+
+function initLongPressSelect() {
+  if (document.body.dataset.longPressReady) return;
+  document.body.dataset.longPressReady = '1';
+  let timer = null;
+  document.addEventListener('touchstart', e => {
+    const item = e.target.closest('[data-track-id]');
+    if (!item) return;
+    timer = setTimeout(() => {
+      toggleSelectTrack(item.dataset.trackId);
+      haptic(20);
+    }, 520);
+  }, { passive:true });
+  ['touchend','touchmove','touchcancel'].forEach(evt => document.addEventListener(evt, () => {
+    clearTimeout(timer);
+    timer = null;
+  }, { passive:true }));
+}
+
+function initHomelabUi() {
+  if (!el('queueOpenBtn')) {
+    const right = document.querySelector('.player-right');
+    if (right) right.insertAdjacentHTML('afterbegin', `<button class="player-icon-btn" id="queueOpenBtn" onclick="toggleQueueDrawer()" title="Queue">≡</button>`);
+  }
+  const tools = document.querySelector('.sidebar .sidebar-section:last-child');
+  if (tools && !document.querySelector('[data-view="offline"]')) {
+    tools.insertAdjacentHTML('beforeend', `<button class="sidebar-item" data-view="continue" onclick="setView('continue',this)"><span class="icon">▶</span>Continue</button><button class="sidebar-item" data-view="offline" onclick="setView('offline',this)"><span class="icon">▣</span>Offline Cache</button>`);
+  }
+  if (!el('statusPill')) {
+    document.body.insertAdjacentHTML('beforeend', `<div class="status-pill" id="statusPill">AuraStream ${AURA_APP_VERSION}</div>`);
+  }
+  const sidebar = document.querySelector('.sidebar');
+  if (sidebar && !el('appVersion')) sidebar.insertAdjacentHTML('beforeend', `<div class="app-version" id="appVersion">v ${AURA_APP_VERSION}</div>`);
+}
+
+async function checkBackendHealth() {
+  const pill = el('statusPill');
+  try {
+    const res = await fetch(`${API}/api/health`, { cache:'no-store' });
+    state.backendOnline = res.ok;
+  } catch {
+    state.backendOnline = false;
+  }
+  if (pill) {
+    pill.classList.toggle('ok', state.backendOnline === true);
+    pill.classList.toggle('bad', state.backendOnline === false);
+    pill.textContent = state.backendOnline ? `Online · ${AURA_APP_VERSION}` : `Backend offline · ${AURA_APP_VERSION}`;
+  }
+  if (state.backendOnline === false && el('content') && !el('content').querySelector('.offline-banner')) renderContent();
+}
+
+const _setViewWithOfflineLoad = setView;
+setView = function(view, btnEl) {
+  _setViewWithOfflineLoad(view, btnEl);
+  if (view === 'offline') renderOfflineViewAsync();
+};
+
+initHomelabUi();
+initLongPressSelect();
+checkBackendHealth();
+setInterval(checkBackendHealth, 30000);
 
 // Start after feature augmentations are registered so the first render uses them.
 init();
