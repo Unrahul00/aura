@@ -12,6 +12,7 @@ import re
 import time
 from collections import OrderedDict
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator, Optional
 
 import httpx
@@ -706,6 +707,7 @@ def _parse_lrc(lrc: str) -> list[dict]:
 
 
 @app.get("/")
-async def serve_frontend():45
+async def serve_frontend():
     from fastapi.responses import FileResponse
-    return FileResponse("index.html")
+    root = Path(__file__).resolve().parent.parent
+    return FileResponse(root / "frontend" / "index.html")
