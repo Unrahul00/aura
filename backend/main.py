@@ -6,7 +6,6 @@ Phase 1: Stream Engine
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import re
 import time
@@ -19,7 +18,7 @@ import httpx
 import yt_dlp
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -362,7 +361,7 @@ def _best_recent_seed(window_seconds: int = 48 * 3600) -> str | None:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["GET", "HEAD", "OPTIONS"],
     allow_headers=["*"],
@@ -708,6 +707,9 @@ def _parse_lrc(lrc: str) -> list[dict]:
 
 @app.get("/")
 async def serve_frontend():
-    from fastapi.responses import FileResponse
     root = Path(__file__).resolve().parent.parent
     return FileResponse(root / "frontend" / "index.html")
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    raise HTTPException(status_code=204)

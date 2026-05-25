@@ -219,6 +219,7 @@ input{font-family:inherit}
 /* Search Type Pills */
 .type-pill{padding:8px 14px;border-radius:999px;border:1px solid var(--border);background:var(--surface2);font-size:13px;font-weight:700;color:var(--text-muted);cursor:pointer;transition:border-color .15s,background .15s,color .15s}
 .type-pill:hover{border-color:var(--border-lit);color:var(--text)}
+.type-pill.active{border-color:var(--accent);color:var(--accent);background:rgba(200,245,66,.08)}
 
 /* Sleep timer badge */
 .sleep-badge{position:fixed;bottom:calc(var(--player-h) + 12px);right:16px;background:var(--surface);border:1px solid var(--accent);border-radius:40px;padding:6px 14px;font-size:12px;font-family:var(--mono);color:var(--accent);z-index:60;display:none;align-items:center;gap:8px}
@@ -496,7 +497,7 @@ input{font-family:inherit}
 
 // Base URL for FastAPI backend.
 // Must point to the server that serves /api/* (not the frontend origin).
-const API = 'http://127.0.0.1:8000';
+const API = ''; // same-origin — works through Cloudflare
 
 // ── 1. IndexedDB Setup ──────────────────────────────────────────────
 
@@ -1373,16 +1374,22 @@ function handleSearchKey(e) {
 
 function setSearchType(type, btnEl) {
   state.searchType = type;
-  // UI active styling
-  const pills = document.querySelectorAll('.type-pill');
-  pills.forEach(p => p.style.borderColor = 'var(--border)');
-  if (btnEl) btnEl.style.borderColor = 'var(--accent)';
   // Re-run search if query exists
   if (state.searchQuery) {
     handleSearchInput(state.searchQuery);
   } else {
     renderContent();
   }
+  // Sync active pill after render
+  setTimeout(() => {
+    document.querySelectorAll('.type-pill').forEach(p => {
+      p.classList.toggle('active', p.textContent.trim().toLowerCase() === type || 
+        (type === 'all' && p.textContent.trim() === 'All') ||
+        (type === 'songs' && p.textContent.trim() === 'Songs') ||
+        (type === 'albums' && p.textContent.trim() === 'Albums') ||
+        (type === 'artists' && p.textContent.trim() === 'Artists'));
+    });
+  }, 0);
 }
 
 
@@ -1464,10 +1471,10 @@ function renderSearch() {
 
   const typePills = `
     <div class="section-header" style="margin-top:18px;margin-bottom:14px;gap:10px;flex-wrap:wrap">
-      <button class="type-pill" onclick="setSearchType('all',this)" style="${""}">All</button>
-      <button class="type-pill" onclick="setSearchType('songs',this)">Songs</button>
-      <button class="type-pill" onclick="setSearchType('albums',this)">Albums</button>
-      <button class="type-pill" onclick="setSearchType('artists',this)">Artists</button>
+      <button class="type-pill ${state.searchType==='all'?'active':''}" onclick="setSearchType('all',this)">All</button>
+      <button class="type-pill ${state.searchType==='songs'?'active':''}" onclick="setSearchType('songs',this)">Songs</button>
+      <button class="type-pill ${state.searchType==='albums'?'active':''}" onclick="setSearchType('albums',this)">Albums</button>
+      <button class="type-pill ${state.searchType==='artists'?'active':''}" onclick="setSearchType('artists',this)">Artists</button>
     </div>`;
 
   if (!state.searchQuery) return `
