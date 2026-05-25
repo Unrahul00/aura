@@ -706,6 +706,6 @@ def _parse_lrc(lrc: str) -> list[dict]:
 
 
 @app.get("/")
-async def serve_frontend():
+async def serve_frontend():45
     from fastapi.responses import FileResponse
     return FileResponse("index.html")
