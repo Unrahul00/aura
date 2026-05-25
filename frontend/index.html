@@ -226,134 +226,332 @@ input{font-family:inherit}
 .sleep-cancel{cursor:pointer;opacity:.6;font-size:16px;transition:opacity .15s}
 .sleep-cancel:hover{opacity:1}
 
-/* Mobile Bottom Tab Bar */
+/* ══════════════════════════════════════════════════
+   MOBILE BOTTOM TAB BAR
+══════════════════════════════════════════════════ */
 .mobile-tab-bar{
   display:none;
   position:fixed;
   bottom:0;left:0;right:0;
-  height:56px;
-  background:rgba(11,11,18,0.97);
-  backdrop-filter:blur(20px);
-  -webkit-backdrop-filter:blur(20px);
+  height:60px;
+  background:var(--surface);
   border-top:1px solid var(--border);
   z-index:48;
   padding-bottom:env(safe-area-inset-bottom,0px);
 }
 .mobile-tab-bar-inner{
-  display:flex;
-  align-items:center;
-  justify-content:space-around;
-  height:56px;
+  display:flex;align-items:stretch;height:60px;
 }
 .mobile-tab-btn{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:3px;flex:1;height:100%;
+  gap:4px;flex:1;
   background:none;border:none;color:var(--text-dim);
-  font-size:10px;font-weight:600;font-family:var(--font);
-  letter-spacing:.5px;text-transform:uppercase;
-  cursor:pointer;transition:color .15s;
+  font-size:9px;font-weight:700;font-family:var(--font);
+  letter-spacing:.8px;text-transform:uppercase;
+  cursor:pointer;
+  transition:color .18s;
   -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+  position:relative;
 }
-.mobile-tab-btn .tab-icon{font-size:18px;line-height:1}
-.mobile-tab-btn:hover,.mobile-tab-btn.active{color:var(--accent)}
+.mobile-tab-btn .tab-icon{
+  font-size:20px;line-height:1;
+  transition:transform .18s;
+}
+.mobile-tab-btn.active{color:var(--accent)}
+.mobile-tab-btn.active .tab-icon{transform:scale(1.15)}
+/* Active indicator dot */
+.mobile-tab-btn.active::after{
+  content:'';position:absolute;top:6px;
+  width:4px;height:4px;border-radius:50%;
+  background:var(--accent);
+  box-shadow:0 0 6px var(--accent);
+}
 
-/* Responsive */
+/* ══════════════════════════════════════════════════
+   MOBILE RESPONSIVE LAYOUT
+══════════════════════════════════════════════════ */
 @media(max-width:768px){
-  :root{--sidebar-w:0px;--player-h:76px}
+  :root{--sidebar-w:0px;--player-h:64px}
 
-  /* Layout: keep grid but ensure content isn't clipped by floating controls */
   #app{grid-template-columns:1fr;grid-template-rows:1fr}
   .sidebar{display:none}
   .mobile-tab-bar{display:block}
   .main{grid-column:1}
-  /* Extra bottom padding: pill player (64px) + gap + tab bar (56px) + safe area */
-  .content{padding:0 16px calc(64px + 16px + 56px + env(safe-area-inset-bottom, 0px) + 16px);}
-  .topbar{padding:16px 16px 12px}
-  .track-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
 
-  /* Floating glassmorphic pill player */
+  /* Padding: mini-player (64) + gap (8) + tab bar (60) + safe area */
+  .content{padding:0 0 calc(64px + 8px + 60px + env(safe-area-inset-bottom,0px) + 8px);}
+
+  /* ── Topbar: logo left, search icon right ── */
+  .topbar{
+    padding:14px 16px 10px;
+    background:var(--bg);
+    display:flex;align-items:center;gap:12px;
+    position:sticky;top:0;z-index:10;
+    border-bottom:1px solid var(--border);
+  }
+  .mobile-topbar-logo{
+    font-size:18px;font-weight:800;letter-spacing:-.5px;
+    display:flex;align-items:center;gap:8px;flex:1;
+  }
+  .search-wrap{display:none}
+  .topbar-actions{margin-left:0;gap:6px}
+  /* Show search as icon-only in topbar on mobile */
+  .mobile-search-btn{
+    width:36px;height:36px;border-radius:50%;
+    background:var(--surface2);border:1px solid var(--border);
+    font-size:16px;display:flex;align-items:center;justify-content:center;
+    color:var(--text-muted);cursor:pointer;transition:color .15s;
+    -webkit-tap-highlight-color:transparent;
+  }
+
+  /* ── Mobile Search Overlay ── */
+  .mobile-search-overlay{
+    position:fixed;inset:0;z-index:100;
+    background:var(--bg);
+    display:flex;flex-direction:column;
+    transform:translateY(-100%);
+    transition:transform .28s cubic-bezier(.4,0,.2,1);
+  }
+  .mobile-search-overlay.open{transform:translateY(0)}
+  .mobile-search-bar{
+    display:flex;align-items:center;gap:10px;
+    padding:14px 16px;
+    border-bottom:1px solid var(--border);
+  }
+  .mobile-search-back{
+    width:36px;height:36px;border-radius:50%;
+    background:none;border:none;color:var(--text-muted);
+    font-size:18px;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;flex-shrink:0;
+  }
+  .mobile-search-input-wrap{flex:1;position:relative}
+  .mobile-search-input{
+    width:100%;background:var(--surface2);
+    border:1px solid var(--border);border-radius:10px;
+    padding:10px 14px;font-size:15px;color:var(--text);
+    font-family:var(--font);outline:none;
+    transition:border-color .2s;
+  }
+  .mobile-search-input:focus{border-color:var(--accent)}
+  .mobile-search-input::placeholder{color:var(--text-dim)}
+  .mobile-search-results{flex:1;overflow-y:auto;padding:8px 0}
+
+  /* ── Track List Rows: YTM style ── */
+  .track-row{
+    display:flex;align-items:center;gap:0;
+    padding:10px 16px;border-radius:0;
+    grid-template-columns:unset;
+  }
+  .track-row-num{display:none}
+  .track-row-thumb{
+    width:48px;height:48px;border-radius:4px;
+    flex-shrink:0;margin-right:14px;
+  }
+  .track-row-info{flex:1;min-width:0}
+  .track-row-info .title{font-size:14px;font-weight:500;line-height:1.3}
+  .track-row-info .artist{font-size:12px;color:var(--text-muted);margin-top:2px}
+  .track-row-dur{display:none}
+  .track-row-like{opacity:1;color:var(--text-dim);width:36px;height:36px}
+
+  /* ── Track Grid: 2 cols ── */
+  .track-grid{grid-template-columns:repeat(2,1fr);gap:10px;padding:0 16px}
+  .track-card{padding:10px}
+
+  /* ── Now Banner: compact ── */
+  .now-banner{height:160px;padding:18px;margin:0 16px;border-radius:12px}
+  .now-banner-art{width:90px;height:90px}
+  .now-banner-title{font-size:20px}
+
+  /* ── Section headers ── */
+  .section-header{margin:24px 16px 12px;padding:0}
+  .section-title{font-size:17px}
+
+  /* ── Mini player bar ── */
   .player-bar{
     position:fixed;
-    bottom:76px;
-    left:12px;
-    right:12px;
+    bottom:60px;
+    left:0;right:0;
     height:64px;
-    background: rgba(18, 18, 26, 0.85) !important;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius:16px;
-    display:grid;
-    grid-template-columns: 1fr auto;
+    background:var(--surface);
+    border:none;
+    border-top:1px solid var(--border);
+    border-bottom:1px solid var(--border);
+    border-radius:0;
+    display:flex;
     align-items:center;
     padding:0 16px;
-    box-shadow:0 8px 32px rgba(0,0,0,0.5);
+    gap:12px;
     z-index:49;
     overflow:hidden;
+    box-shadow:none;
+  }
+  /* Progress line at top of mini player */
+  .player-bar::before{
+    content:'';position:absolute;top:0;left:0;right:0;
+    height:2px;background:rgba(255,255,255,0.06);
+    pointer-events:none;
+  }
+  .player-bar .player-controls{display:none}
+  .player-bar .player-right{display:none}
+
+  /* Track info: takes all space */
+  .player-track{
+    flex:1;min-width:0;display:flex;align-items:center;gap:12px;
+    max-width:unset;
+  }
+  .player-thumb{
+    width:44px;height:44px;border-radius:4px;flex-shrink:0;
+  }
+  .player-track-info{flex:1;min-width:0}
+  .player-track-title{font-size:13px;font-weight:600}
+  .player-track-artist{font-size:11px}
+  .player-like{display:none}
+
+  /* Inline controls on the right */
+  .mobile-mini-controls{
+    display:flex;align-items:center;gap:4px;flex-shrink:0;
+  }
+  .mobile-mini-btn{
+    width:36px;height:36px;border-radius:50%;
+    background:none;border:none;color:var(--text);
+    font-size:20px;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;-webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+  }
+  .mobile-mini-play{
+    width:40px;height:40px;font-size:22px;
   }
 
-  /* Track area sizing: allow room for controls */
-  .player-track{display:flex;align-items:center;gap:12px;min-width:0;max-width:75%}
-  .player-track-info{min-width:0;overflow:hidden}
-  .player-track-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .player-track-artist{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-
-  /* Compact controls inline */
-  .player-controls{display:flex;align-items:center;gap:8px;justify-self:end}
-  .ctrl-buttons{display:flex;gap:8px;align-items:center}
-
-  /* Small integrated play/pause on the right edge of the pill */
-  .ctrl-play{
-    width:36px;height:36px;border-radius:8px;background:transparent;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;border:none;box-shadow:none;padding:0
+  /* Progress bar at bottom of mini player */
+  .player-bar .absolute-bottom-progress{
+    position:absolute;bottom:0;left:0;right:0;height:2px;
+    background:rgba(255,255,255,0.06);
+  }
+  .player-bar .absolute-bottom-progress-fill{
+    height:100%;background:var(--accent);width:0%;
+    transition:width .1s linear;
   }
 
-  /* Mobile progress tracking micro-line configuration */
-  .player-bar .absolute-bottom-progress{position:absolute;bottom:0;left:0;right:0;height:2px;background:rgba(255,255,255,0.08)}
-  .player-bar .absolute-bottom-progress-fill{height:100%;background:var(--accent);width:0%;transition:width .1s linear}
-
-  .player-right{display:none}
   .lyrics-panel{width:100%}
 }
 
-/* Mobile Player Page Styles */
-.mobile-player-page{position:fixed;left:0;right:0;bottom:0;height:76vh;max-height:92vh;transform:translateY(100%);transition:transform .32s ease, opacity .32s ease;opacity:0;background:linear-gradient(180deg, rgba(6,6,10,0.98), rgba(8,8,12,0.98));z-index:200;display:flex;flex-direction:column;align-items:center;padding:18px 18px calc(18px + env(safe-area-inset-bottom, 18px));overflow-y:auto;backdrop-filter:blur(18px);border-top-left-radius:24px;border-top-right-radius:24px;}
+/* Mobile Player Full-Screen Sheet */
+.mobile-player-page{
+  position:fixed;left:0;right:0;bottom:0;
+  height:92vh;max-height:100vh;
+  transform:translateY(100%);
+  transition:transform .34s cubic-bezier(.4,0,.2,1), opacity .3s ease;
+  opacity:0;
+  background:var(--bg);
+  z-index:200;
+  display:flex;flex-direction:column;align-items:center;
+  padding:0 24px calc(24px + env(safe-area-inset-bottom,0px));
+  overflow-y:auto;
+  border-top-left-radius:20px;
+  border-top-right-radius:20px;
+}
 .mobile-player-page.open{transform:translateY(0);opacity:1}
-.mobile-player-page.expanded{height:100vh;max-height:100vh;}
-.mobile-player-handle{width:42px;height:4px;border-radius:999px;background:rgba(255,255,255,0.24);margin-bottom:14px;cursor:pointer;opacity:.75;transition:opacity .2s ease}
-.mobile-player-handle:hover{opacity:1}
-.mobile-player-close{position:absolute;top:18px;right:18px;background:rgba(255,255,255,0.08);border:none;color:var(--text);font-size:20px;width:44px;height:44px;border-radius:14px}
-.mobile-player-art-wrap{width:100%;max-width:420px;border-radius:22px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,0.55);margin-top:0}
+.mobile-player-page.expanded{height:100vh;max-height:100vh;border-radius:0}
+/* Handle */
+.mobile-player-handle{
+  width:36px;height:4px;border-radius:999px;
+  background:rgba(255,255,255,0.15);
+  margin:12px 0 16px;
+  cursor:pointer;flex-shrink:0;
+  align-self:center;
+}
+/* Close button */
+.mobile-player-close{
+  position:absolute;top:14px;right:16px;
+  background:rgba(255,255,255,0.06);border:none;
+  color:var(--text-muted);font-size:16px;
+  width:32px;height:32px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+}
+/* Art */
+.mobile-player-art-wrap{
+  width:100%;max-width:320px;
+  border-radius:12px;overflow:hidden;
+  box-shadow:0 12px 40px rgba(0,0,0,.6);
+  margin-top:8px;flex-shrink:0;
+}
 .mobile-player-art{width:100%;aspect-ratio:1/1;object-fit:cover;display:block}
-.mobile-player-info{margin-top:18px;text-align:center;max-width:100%;padding:0 8px}
-.mobile-player-title{font-size:22px;font-weight:800;letter-spacing:-.4px;line-height:1.1;word-break:break-word}
-.mobile-player-artist{font-size:14px;color:var(--text-muted);margin-top:6px;word-break:break-word}
-.mobile-player-controls{display:flex;align-items:center;gap:12px;margin-top:20px;flex-wrap:wrap;justify-content:center}
-.mobile-ctrl-btn{width:50px;height:50px;border-radius:18px;background:rgba(255,255,255,0.06);border:none;color:var(--text);font-size:20px}
-.mobile-ctrl-play{width:140px;height:58px;border-radius:18px;background:var(--accent);color:#0a0a0f;font-size:28px;border:none;display:flex;align-items:center;justify-content:center}
-.mobile-player-meta{display:flex;align-items:center;gap:10px;width:100%;padding:16px 16px;flex-wrap:wrap;justify-content:center}
-.mobile-like-btn,.mobile-add-btn,.mobile-newpl-btn{width:46px;height:46px;border-radius:16px;background:rgba(255,255,255,0.06);border:none;color:var(--text);font-size:18px;display:flex;align-items:center;justify-content:center}
-.mobile-add-btn,.mobile-newpl-btn{font-size:22px}
-.mobile-player-scrub{flex:1;min-width:0;width:100%;height:8px;background:rgba(255,255,255,0.08);border-radius:10px}
-.mobile-lyrics-header{display:flex;align-items:center;justify-content:space-between;width:100%;padding:0 16px;margin-top:18px;gap:12px}
-.mobile-lyrics-body{display:none;max-height:40vh;overflow-y:auto;padding:16px 16px 20px;background:rgba(255,255,255,0.04);border-radius:20px;border:1px solid rgba(255,255,255,0.06);width:100%;box-sizing:border-box}
-.mobile-lyrics-toggle{width:42px;height:42px;border-radius:14px;background:rgba(255,255,255,0.06);border:none;color:var(--text);font-size:18px}
-.mobile-player-bottom{display:flex;align-items:center;justify-content:space-between;width:100%;padding:12px 16px;margin-top:auto;gap:12px;flex-wrap:wrap}
-.mobile-icon{background:rgba(255,255,255,0.02);border:none;color:var(--text);padding:10px;border-radius:12px}
+/* Info */
+.mobile-player-info{
+  margin-top:22px;text-align:left;width:100%;padding:0 2px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.mobile-player-info-text{flex:1;min-width:0}
+.mobile-player-title{font-size:20px;font-weight:700;letter-spacing:-.3px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mobile-player-artist{font-size:13px;color:var(--text-muted);margin-top:4px}
+/* Scrub */
+.mobile-player-meta{
+  display:flex;align-items:center;gap:10px;
+  width:100%;padding:18px 0 4px;flex-shrink:0;
+}
+.mobile-like-btn{
+  width:40px;height:40px;border-radius:50%;
+  background:none;border:none;color:var(--text-muted);
+  font-size:20px;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.mobile-like-btn.liked{color:var(--accent-warm)}
+.mobile-add-btn,.mobile-newpl-btn{
+  width:40px;height:40px;border-radius:50%;
+  background:none;border:none;color:var(--text-muted);
+  font-size:20px;display:flex;align-items:center;justify-content:center;
+}
+.mobile-player-scrub{
+  flex:1;min-width:0;height:4px;
+  -webkit-appearance:none;appearance:none;
+  background:rgba(255,255,255,0.12);
+  border-radius:2px;outline:none;cursor:pointer;
+}
+.mobile-player-scrub::-webkit-slider-thumb{
+  -webkit-appearance:none;width:14px;height:14px;
+  border-radius:50%;background:var(--text);cursor:pointer;
+}
+/* Controls */
+.mobile-player-controls{
+  display:flex;align-items:center;gap:0;
+  margin-top:10px;width:100%;
+  justify-content:space-between;flex-shrink:0;
+}
+.mobile-ctrl-btn{
+  width:52px;height:52px;border-radius:50%;
+  background:none;border:none;color:var(--text);
+  font-size:22px;display:flex;align-items:center;justify-content:center;
+}
+.mobile-ctrl-play{
+  width:64px;height:64px;border-radius:50%;
+  background:var(--text);color:var(--bg);
+  font-size:26px;border:none;
+  display:flex;align-items:center;justify-content:center;
+}
+/* Lyrics section */
+.mobile-lyrics-header{
+  display:flex;align-items:center;justify-content:space-between;
+  width:100%;padding:16px 0 8px;flex-shrink:0;
+  border-top:1px solid var(--border);margin-top:12px;
+}
+.mobile-lyrics-body{
+  display:none;max-height:36vh;overflow-y:auto;
+  padding:8px 0 16px;width:100%;box-sizing:border-box;
+}
+.mobile-lyrics-toggle{
+  width:36px;height:36px;border-radius:50%;
+  background:var(--surface2);border:none;color:var(--text-muted);font-size:16px;
+  display:flex;align-items:center;justify-content:center;
+}
 
 @media(max-width:480px){
-  .mobile-player-page{padding:12px 12px calc(12px + env(safe-area-inset-bottom, 12px));}
-  .mobile-player-close{top:12px;right:12px;width:40px;height:40px;font-size:18px}
-  .mobile-player-art-wrap{width:100%;margin-top:0}
-  .mobile-player-title{font-size:20px}
-  .mobile-player-artist{font-size:13px}
-  .mobile-player-controls{gap:10px}
-  .mobile-ctrl-btn{width:46px;height:46px;font-size:18px}
-  .mobile-ctrl-play{width:120px;height:54px;font-size:24px}
-  .mobile-player-meta{padding:12px 12px;gap:8px}
-  .mobile-like-btn,.mobile-add-btn,.mobile-newpl-btn{width:42px;height:42px;font-size:16px}
-  .mobile-lyrics-header{padding:0 12px}
-  .mobile-lyrics-body{padding:14px 14px 18px}
-  .mobile-player-bottom{padding:10px 12px}
+  .mobile-player-page{padding:0 18px calc(18px + env(safe-area-inset-bottom,0px));}
+  .mobile-player-art-wrap{max-width:280px}
+  .mobile-player-title{font-size:18px}
+  .mobile-ctrl-play{width:58px;height:58px;font-size:24px}
+  .mobile-ctrl-btn{width:46px;height:46px;font-size:20px}
 }
 
 
@@ -520,6 +718,10 @@ input{font-family:inherit}
 
   <main class="main">
     <div class="topbar">
+      <!-- Mobile-only logo -->
+      <div class="mobile-topbar-logo" id="mobileTopbarLogo" style="display:none">
+        <span class="logo-dot"></span>AuraStream
+      </div>
       <div class="search-wrap" id="searchWrap">
         <span class="search-icon">⌕</span>
         <input class="search-input" type="text" id="searchInput"
@@ -532,6 +734,8 @@ input{font-family:inherit}
         <div class="search-suggestions" id="searchSuggestions"></div>
       </div>
       <div class="topbar-actions">
+        <!-- Mobile search icon button -->
+        <button class="mobile-search-btn" id="mobileSearchBtn" style="display:none" onclick="openMobileSearch()" title="Search">⌕</button>
         <button class="topbar-btn theme-toggle-btn" id="themeToggleBtn" onclick="toggleThemePanel()" title="Customize Theme">🎨</button>
         <button class="topbar-btn" id="sleepBtn" onclick="openSleepModal()" title="Sleep Timer">🌙</button>
         <button class="topbar-btn" id="lyricsToggleBtn" onclick="toggleLyrics()" title="Lyrics">♪</button>
@@ -582,6 +786,12 @@ input{font-family:inherit}
       <button class="player-icon-btn" id="lyricsBtn" onclick="toggleLyrics()" title="Lyrics">♪</button>
       <button class="player-icon-btn" onclick="openSleepModal()" title="Sleep Timer">🌙</button>
     </div>
+    <!-- Mobile inline controls (shown only on mobile via CSS) -->
+    <div class="mobile-mini-controls" id="mobileMiniControls">
+      <button class="mobile-mini-btn" onclick="prevTrack()" title="Previous" style="display:none" id="mmPrev">⏮</button>
+      <button class="mobile-mini-btn mobile-mini-play" id="mobileMiniPlayBtn" onclick="event.stopPropagation();togglePlay()">▶</button>
+      <button class="mobile-mini-btn" onclick="event.stopPropagation();nextTrack()" title="Next">⏭</button>
+    </div>
     <div class="absolute-bottom-progress">
       <div id="mobileProgressFill" class="absolute-bottom-progress-fill"></div>
     </div>
@@ -595,27 +805,29 @@ input{font-family:inherit}
       <img id="mpArt" class="mobile-player-art" src="" alt="art" />
     </div>
     <div class="mobile-player-info">
-      <div id="mpTitle" class="mobile-player-title">—</div>
-      <div id="mpArtist" class="mobile-player-artist">—</div>
+      <div class="mobile-player-info-text">
+        <div id="mpTitle" class="mobile-player-title">—</div>
+        <div id="mpArtist" class="mobile-player-artist">—</div>
+      </div>
+      <button id="mpLike" class="mobile-like-btn" onclick="toggleCurrentLike()">♡</button>
+    </div>
+    <div class="mobile-player-meta">
+      <input id="mobilePlayerScrub" class="mobile-player-scrub" type="range" min="0" max="100" value="0" oninput="handleMobileScrub(this.value)" onchange="handleMobileScrubEnd(this.value)" />
     </div>
     <div class="mobile-player-controls">
+      <button class="mobile-ctrl-btn" id="mpShuffleBtn" onclick="toggleShuffle()" title="Shuffle">⇄</button>
       <button class="mobile-ctrl-btn" onclick="prevTrack()">⏮</button>
       <button id="mobilePlayBtn" class="mobile-ctrl-play" onclick="togglePlay()">▶</button>
       <button class="mobile-ctrl-btn" onclick="nextTrack()">⏭</button>
-    </div>
-    <div class="mobile-player-meta">
-      <button id="mpLike" class="mobile-like-btn" onclick="toggleCurrentLike()">♡</button>
-      <button id="mpAdd" class="mobile-add-btn" onclick="openPlaylistCard()" title="Add to playlist">＋</button>
-      <input id="mobilePlayerScrub" class="mobile-player-scrub" type="range" min="0" max="100" value="0" oninput="handleMobileScrub(this.value)" onchange="handleMobileScrubEnd(this.value)" />
+      <button class="mobile-ctrl-btn" id="mpRepeatBtn" onclick="cycleRepeat()" title="Repeat">↻</button>
     </div>
     <div class="mobile-lyrics-header">
-      <span class="lyrics-title-text">Lyrics</span>
+      <span style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);">Lyrics</span>
       <button class="mobile-lyrics-toggle" onclick="toggleLyrics()">♪</button>
     </div>
     <div id="mobileLyricsBody" class="lyrics-body mobile-lyrics-body">
       <div class="lyrics-none"><span class="icon">♪</span><span>Play a track to see lyrics</span></div>
     </div>
-
   </div>
 </div>
 
@@ -625,20 +837,37 @@ input{font-family:inherit}
     <button class="mobile-tab-btn active" data-view="home" onclick="mobileTabNav('home',this)">
       <span class="tab-icon">⌂</span>Home
     </button>
-    <button class="mobile-tab-btn" data-view="search" onclick="mobileTabNav('search',this)">
+    <button class="mobile-tab-btn" data-view="search" onclick="mobileTabSearch(this)">
       <span class="tab-icon">⌕</span>Search
     </button>
     <button class="mobile-tab-btn" data-view="nowplaying" onclick="mobileTabNav('nowplaying',this)">
-      <span class="tab-icon">♫</span>Now Playing
+      <span class="tab-icon">♫</span>Playing
     </button>
     <button class="mobile-tab-btn" data-view="liked" onclick="mobileTabNav('liked',this)">
       <span class="tab-icon">♡</span>Liked
     </button>
     <button class="mobile-tab-btn" data-view="library" onclick="mobileTabNav('library',this)">
-      <span class="tab-icon">◧</span>Library
+      <span class="tab-icon">≡</span>Library
     </button>
   </div>
 </nav>
+
+<!-- Mobile Search Overlay -->
+<div class="mobile-search-overlay" id="mobileSearchOverlay">
+  <div class="mobile-search-bar">
+    <button class="mobile-search-back" onclick="closeMobileSearch()">←</button>
+    <div class="mobile-search-input-wrap">
+      <input class="mobile-search-input" id="mobileSearchInput" type="text"
+             placeholder="Search songs, artists…"
+             autocomplete="off"
+             oninput="handleSearchInput(this.value)"
+             onkeydown="handleSearchKey(event)"/>
+    </div>
+  </div>
+  <div class="mobile-search-results" id="mobileSearchResults">
+    <div class="content" id="mobileSearchContent" style="padding:0"></div>
+  </div>
+</div>
 
 <!-- Lyrics Panel -->
 <div class="lyrics-panel" id="lyricsPanel">
@@ -2733,12 +2962,62 @@ function handleSearchKey(e) {
     e.target.value = '';
     handleSearchInput('');
     hideSuggestions();
+    closeMobileSearch();
   }
   if (e.key === 'ArrowDown') {
     const first = el('searchSuggestions')?.querySelector('.suggestion-item');
     if (first) first.focus();
   }
 }
+
+// ── Mobile Responsive Helpers ──────────────────────────────────────
+function isMobile() { return window.innerWidth <= 768; }
+
+function applyMobileLayout() {
+  const mobile = isMobile();
+  const logo            = el('mobileTopbarLogo');
+  const searchWrap      = el('searchWrap');
+  const mobileSearchBtn = el('mobileSearchBtn');
+  if (logo)            logo.style.display = mobile ? 'flex' : 'none';
+  if (searchWrap)      searchWrap.style.display = mobile ? 'none' : '';
+  if (mobileSearchBtn) mobileSearchBtn.style.display = mobile ? 'flex' : 'none';
+}
+
+applyMobileLayout();
+window.addEventListener('resize', applyMobileLayout);
+
+function mobileTabSearch(btnEl) {
+  // Mark search tab as active
+  document.querySelectorAll('.mobile-tab-btn').forEach(b => b.classList.toggle('active', b === btnEl));
+  openMobileSearch();
+}
+
+
+  const overlay = el('mobileSearchOverlay');
+  if (overlay) {
+    overlay.classList.add('open');
+    setTimeout(() => el('mobileSearchInput')?.focus(), 120);
+  }
+}
+
+function closeMobileSearch() {
+  const overlay = el('mobileSearchOverlay');
+  if (overlay) {
+    overlay.classList.remove('open');
+    const inp = el('mobileSearchInput');
+    if (inp) inp.value = '';
+  }
+}
+
+// Patch syncPlayBtn to also update mobile mini play button
+const _origSyncPlayBtnMobile = syncPlayBtn;
+syncPlayBtn = function() {
+  _origSyncPlayBtnMobile();
+  const mmb = el('mobileMiniPlayBtn');
+  if (mmb) mmb.textContent = state.isBuffering ? '…' : (state.isPlaying ? '⏸' : '▶');
+};
+
+
 
 </script>
 </body>
