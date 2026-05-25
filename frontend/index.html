@@ -102,6 +102,7 @@ input{font-family:inherit}
 .track-row.playing{background:rgba(200,245,66,.06)}
 .track-row-num{font-size:12px;color:var(--text-dim);font-family:var(--mono);text-align:center}
 .track-row-thumb{width:40px;height:40px;border-radius:var(--radius-sm);object-fit:cover;background:var(--surface2)}
+.playlist-badge{display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text);}
 .track-row-info .title{font-size:14px;font-weight:500}
 .track-row-info .artist{font-size:12px;color:var(--text-muted);margin-top:1px}
 .track-row-dur{font-size:12px;font-family:var(--mono);color:var(--text-dim)}
@@ -141,7 +142,7 @@ input{font-family:inherit}
 .player-right{display:flex;align-items:center;justify-content:flex-end;gap:8px}
 .vol-wrap{display:flex;align-items:center;gap:8px}
 .vol-icon{font-size:15px;color:var(--text-muted);cursor:pointer}
-.vol-slider{-webkit-appearance:none;width:80px;height:4px;border-radius:2px;background:var(--surface2);outline:none;cursor:pointer}
+.vol-slider{-webkit-appearance:none;appearance:none;width:80px;height:4px;border-radius:2px;background:var(--surface2);outline:none;cursor:pointer}
 .vol-slider::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--text);cursor:pointer}
 .player-icon-btn{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--text-muted);transition:color .15s,background .15s}
 .player-icon-btn:hover{color:var(--text);background:rgba(255,255,255,.06)}
@@ -293,9 +294,13 @@ input{font-family:inherit}
 .mobile-player-controls{display:flex;align-items:center;gap:18px;margin-top:20px}
 .mobile-ctrl-btn{width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,0.04);border:none;color:var(--text);font-size:18px}
 .mobile-ctrl-play{width:140px;height:56px;border-radius:14px;background:var(--accent);color:#0a0a0f;font-size:28px;border:none;display:flex;align-items:center;justify-content:center}
-.mobile-player-meta{display:flex;align-items:center;gap:12px;width:100%;padding:18px 20px}
-.mobile-like-btn{width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,0.04);border:none;color:var(--text);font-size:18px}
-.mobile-player-scrub{flex:1;height:6px;background:rgba(255,255,255,0.06);border-radius:6px}
+.mobile-player-meta{display:flex;align-items:center;gap:10px;width:100%;padding:18px 20px;flex-wrap:wrap}
+.mobile-like-btn,.mobile-add-btn,.mobile-newpl-btn{width:48px;height:48px;border-radius:14px;background:rgba(255,255,255,0.06);border:none;color:var(--text);font-size:18px;display:flex;align-items:center;justify-content:center}
+.mobile-add-btn,.mobile-newpl-btn{font-size:22px}
+.mobile-player-scrub{flex:1;min-width:120px;height:6px;background:rgba(255,255,255,0.06);border-radius:6px}
+.mobile-lyrics-header{display:flex;align-items:center;justify-content:space-between;width:100%;padding:0 20px;margin-top:16px}
+.mobile-lyrics-body{max-height:260px;overflow-y:auto;padding:0 20px 12px;}
+.mobile-lyrics-toggle{width:42px;height:42px;border-radius:14px;background:rgba(255,255,255,0.06);border:none;color:var(--text);font-size:18px}
 .mobile-player-bottom{display:flex;align-items:center;justify-content:space-between;width:100%;padding:12px 20px;margin-top:auto}
 .mobile-icon{background:rgba(255,255,255,0.02);border:none;color:var(--text);padding:10px;border-radius:12px}
 
@@ -407,10 +412,17 @@ input{font-family:inherit}
       <button class="mobile-ctrl-btn" onclick="nextTrack()">⏭</button>
     </div>
     <div class="mobile-player-meta">
-      <button id="mpLike" class="mobile-like-btn" onclick="toggleCurrentLike()">♡</button>
+        <button id="mpLike" class="mobile-like-btn" onclick="toggleCurrentLike()">♡</button>
       <button id="mpAdd" class="mobile-add-btn" onclick="addCurrentToPlaylist()" title="Add to playlist">＋</button>
       <button id="mpNewPl" class="mobile-newpl-btn" onclick="createPlaylistPrompt()" title="New playlist">✚</button>
       <input id="mobilePlayerScrub" class="mobile-player-scrub" type="range" min="0" max="100" value="0" oninput="handleMobileScrub(this.value)" onchange="handleMobileScrubEnd(this.value)" />
+    </div>
+    <div class="mobile-lyrics-header">
+      <span class="lyrics-title-text">Lyrics</span>
+      <button class="mobile-lyrics-toggle" onclick="toggleLyrics()">♪</button>
+    </div>
+    <div id="mobileLyricsBody" class="lyrics-body mobile-lyrics-body">
+      <div class="lyrics-none"><span class="icon">♪</span><span>Play a track to see lyrics</span></div>
     </div>
     <div class="mobile-player-bottom">
       <button class="mobile-icon">∞</button>
@@ -462,7 +474,9 @@ input{font-family:inherit}
 // AURASTREAM — COMPLETE FRONTEND ENGINE
 // ═══════════════════════════════════════════════════════════════════
 
-const API = '';
+const API = window.location.protocol.startsWith('http')
+  ? `${window.location.origin}/api`
+  : 'http://127.0.0.1:8000/api';
 
 // ── 1. IndexedDB Setup ──────────────────────────────────────────────
 
@@ -1124,17 +1138,24 @@ function updateLyricsSync(currentTime) {
   _activeLyricIdx = best;
 
   const body = el('lyricsBody');
+  const bodyMobile = el('mobileLyricsBody');
   if (!body) return;
 
   const allLines = body.querySelectorAll('.lyric-line');
+  const allMobile = bodyMobile ? bodyMobile.querySelectorAll('.lyric-line') : [];
   allLines.forEach((el, i) => {
+    el.classList.remove('active', 'past');
+    if (i < best)  el.classList.add('past');
+    if (i === best) el.classList.add('active');
+  });
+  allMobile.forEach((el, i) => {
     el.classList.remove('active', 'past');
     if (i < best)  el.classList.add('past');
     if (i === best) el.classList.add('active');
   });
 
   // Smooth scroll active line into view
-  const activeLine = body.querySelector('.lyric-line.active');
+  const activeLine = body.querySelector('.lyric-line.active') || bodyMobile?.querySelector('.lyric-line.active');
   if (activeLine) {
     activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
@@ -1507,12 +1528,37 @@ function renderHistory() {
 }
 
 function renderPlaylists() {
+  if (!state.playlists.length) {
+    return `
+      <div class="section-header">
+        <span class="section-title">Playlists</span>
+        <button class="db-btn accent" onclick="createPlaylistPrompt()">New Playlist</button>
+      </div>
+      <div class="empty-state">
+        <div class="empty-icon">♫</div>
+        <div class="empty-title">No playlists yet</div>
+        <div class="empty-sub">Create a playlist and add songs from the player.</div>
+      </div>`;
+  }
+
   return `
-    <div class="section-header"><span class="section-title">Playlists</span></div>
-    <div class="empty-state">
-      <div class="empty-icon">♫</div>
-      <div class="empty-title">No playlists yet</div>
-      <div class="empty-sub">Like songs to build your library</div>
+    <div class="section-header">
+      <span class="section-title">Playlists</span>
+      <button class="db-btn accent" onclick="createPlaylistPrompt()">New Playlist</button>
+    </div>
+    <div class="track-list">
+      ${state.playlists.map((pl, idx) => `
+        <div class="track-row" onclick="playPlaylist('${pl.id}')">
+          <div class="track-row-num">${idx + 1}</div>
+          <div class="track-row-thumb playlist-badge">${pl.tracks.length || 0}♫</div>
+          <div class="track-row-info">
+            <div class="title">${esc(pl.name)}</div>
+            <div class="artist">${pl.tracks.length} track${pl.tracks.length === 1 ? '' : 's'}</div>
+          </div>
+          <div class="track-row-dur">Play</div>
+          <button class="track-row-like" onclick="event.stopPropagation(); deletePlaylist('${pl.id}')">✕</button>
+        </div>
+      `).join('')}
     </div>`;
 }
 
@@ -1671,6 +1717,22 @@ async function addCurrentToPlaylist() {
   renderContent();
 }
 
+async function playPlaylist(id) {
+  const pl = state.playlists.find(p => p.id === id);
+  if (!pl) return showToast('Playlist not found', true);
+  if (!pl.tracks.length) return showToast('Playlist is empty', true);
+  await loadTrack(pl.tracks[0], pl.tracks, 0, true);
+  renderContent();
+  closeMobilePlayer();
+}
+
+async function deletePlaylist(id) {
+  await dbDelete('playlists', id);
+  state.playlists = state.playlists.filter(p => p.id !== id);
+  showToast('Playlist deleted');
+  renderContent();
+}
+
 function openMobilePlayer() {
   const elp = el('mobilePlayerPage'); if(!elp) return;
   // populate values
@@ -1680,6 +1742,7 @@ function openMobilePlayer() {
   const mpArt = el('mpArt'); if (mpArt) mpArt.src = thumb;
   elp.classList.add('open'); elp.setAttribute('aria-hidden','false');
   syncPlayBtn(); syncLikeBtn();
+  if (state.currentTrack && !state.lyricsData) fetchLyrics(state.currentTrack.id);
 }
 
 function closeMobilePlayer() {
