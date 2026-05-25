@@ -2957,10 +2957,14 @@ function mobileTabSearch(btnEl) {
 }
 
 
+function openMobileSearch() {
   const overlay = el('mobileSearchOverlay');
   if (overlay) {
     overlay.classList.add('open');
-    setTimeout(() => el('mobileSearchInput')?.focus(), 120);
+    setTimeout(() => {
+      const input = el('mobileSearchInput');
+      if (input) input.focus();
+    }, 120);
   }
 }
 
