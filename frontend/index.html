@@ -3015,6 +3015,7 @@ function openMobileSearch() {
   const overlay = el('mobileSearchOverlay');
   if (overlay) {
     overlay.classList.add('open');
+    syncMobileSearchContent();
     setTimeout(() => {
       const input = el('mobileSearchInput');
       if (input) input.focus();
@@ -3028,6 +3029,8 @@ function closeMobileSearch() {
     overlay.classList.remove('open');
     const inp = el('mobileSearchInput');
     if (inp) inp.value = '';
+    const results = el('mobileSearchContent');
+    if (results) results.innerHTML = '';
   }
 }
 
@@ -3254,6 +3257,7 @@ handleSearchInput = async function(val) {
     renderSuggestions();
     setViewSilent('search');
     renderContent();
+    syncMobileSearchContent();
     return;
   }
   if (state.searchQuery.includes('youtube.com') || state.searchQuery.includes('youtu.be')) {
@@ -3265,6 +3269,7 @@ handleSearchInput = async function(val) {
     }
   }
   setViewSilent('search');
+  syncMobileSearchContent();
   _suggestTimeout = setTimeout(async () => {
     try {
       const res = await fetch(`${API}/api/suggest?q=${encodeURIComponent(state.searchQuery)}`);
@@ -3278,6 +3283,7 @@ handleSearchInput = async function(val) {
     hideSuggestions();
     state.isSearching = true;
     renderContent();
+    syncMobileSearchContent();
     try {
       const res = await fetch(`${API}/api/search?q=${encodeURIComponent(state.searchQuery)}&type=${encodeURIComponent(state.searchType)}&limit=30`);
       const data = await res.json();
@@ -3288,6 +3294,7 @@ handleSearchInput = async function(val) {
     }
     state.isSearching = false;
     renderContent();
+    syncMobileSearchContent();
   }, 460);
 };
 
@@ -3902,7 +3909,18 @@ renderContent = function() {
     state.cacheEntriesLoaded = true;
     renderOfflineViewAsync();
   }
+  syncMobileSearchContent();
 };
+
+function isMobileSearchOpen() {
+  return el('mobileSearchOverlay')?.classList.contains('open');
+}
+
+function syncMobileSearchContent() {
+  const target = el('mobileSearchContent');
+  if (!target || !isMobileSearchOpen()) return;
+  target.innerHTML = renderSearch();
+}
 
 const _playlistsWithDetails = renderPlaylists;
 renderPlaylists = function() {
