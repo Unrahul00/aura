@@ -353,6 +353,76 @@ input{font-family:inherit}
 .lyrics-panel-fullscreen-btn{width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.06);font-size:13px;display:flex;align-items:center;justify-content:center;transition:background .15s;margin-left:auto;flex-shrink:0}
 .lyrics-panel-fullscreen-btn:hover{background:rgba(255,255,255,.12)}
 
+/* ── Page Transitions ─────────────────────────────────────────────── */
+@keyframes page-in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes page-out{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-10px)}}
+.content.page-entering{animation:page-in .28s cubic-bezier(.22,1,.36,1) both}
+.content.page-leaving{animation:page-out .18s ease both}
+
+/* ── Now Playing Full Page ───────────────────────────────────────── */
+.np-page{display:grid;grid-template-columns:1fr 1fr;gap:40px;padding:32px 0;align-items:start}
+@media(max-width:900px){.np-page{grid-template-columns:1fr;gap:24px}}
+.np-left{display:flex;flex-direction:column;gap:24px;position:sticky;top:20px}
+.np-art-wrap{border-radius:18px;overflow:hidden;aspect-ratio:1;background:var(--surface2);box-shadow:0 24px 64px rgba(0,0,0,.55);position:relative}
+.np-art{width:100%;height:100%;object-fit:cover;display:block;transition:transform .6s cubic-bezier(.22,1,.36,1)}
+.np-art-wrap:hover .np-art{transform:scale(1.03)}
+.np-aura-ring{position:absolute;inset:-2px;border-radius:20px;background:conic-gradient(from 0deg,var(--accent),var(--accent-alt),var(--accent));opacity:0;transition:opacity .5s;z-index:-1;filter:blur(8px)}
+.np-art-wrap.playing .np-aura-ring{opacity:.45}
+.np-info{display:flex;flex-direction:column;gap:8px}
+.np-title{font-size:26px;font-weight:800;letter-spacing:-.5px;line-height:1.2}
+.np-artist{font-size:16px;color:var(--text-muted)}
+.np-meta{display:flex;align-items:center;gap:10px;margin-top:4px}
+.np-badge{padding:4px 10px;border-radius:999px;background:rgba(200,245,66,.1);border:1px solid rgba(200,245,66,.2);font-size:11px;font-weight:600;color:var(--accent);font-family:var(--mono);text-transform:uppercase;letter-spacing:1px}
+.np-actions{display:flex;gap:10px;flex-wrap:wrap}
+.np-action-btn{padding:10px 18px;border-radius:999px;border:1px solid var(--border-lit);font-size:13px;font-weight:600;color:var(--text-muted);background:var(--surface2);transition:all .15s;cursor:pointer}
+.np-action-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(200,245,66,.06)}
+.np-action-btn.liked{color:var(--accent-warm);border-color:var(--accent-warm)}
+
+/* Full Lyrics Panel on NP page */
+.np-right{display:flex;flex-direction:column;gap:0}
+.np-lyrics-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;min-height:480px;max-height:calc(100vh - 200px)}
+.np-lyrics-header{padding:16px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.np-lyrics-label{font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);font-family:var(--mono)}
+.np-lyrics-source{font-size:11px;color:var(--text-dim);font-family:var(--mono)}
+.np-lyrics-body{flex:1;overflow-y:auto;padding:28px 22px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth}
+.np-lyric-line{font-size:17px;line-height:1.75;color:var(--text-dim);transition:color .35s,font-size .35s,font-weight .35s;cursor:pointer;padding:3px 0;border-radius:6px}
+.np-lyric-line:hover{color:var(--text-muted)}
+.np-lyric-line.active{color:var(--text);font-size:20px;font-weight:800;letter-spacing:-.2px}
+.np-lyric-line.past{color:rgba(255,255,255,.25)}
+.np-lyrics-plain{font-size:15px;line-height:2;color:var(--text-muted);white-space:pre-line}
+.np-lyrics-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:10px;color:var(--text-dim)}
+.np-lyrics-empty .icon{font-size:40px;opacity:.25}
+.np-lyrics-empty span{font-size:13px}
+
+/* ── Theme Customizer Panel ──────────────────────────────────────── */
+.theme-panel{position:fixed;right:0;top:0;bottom:var(--player-h);width:280px;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .3s ease;z-index:45;overflow-y:auto}
+.theme-panel.open{transform:translateX(0)}
+.theme-panel-header{padding:20px 20px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.theme-panel-title{font-size:14px;font-weight:700;letter-spacing:.5px}
+.theme-close-btn{font-size:18px;color:var(--text-muted);cursor:pointer;transition:color .15s}
+.theme-close-btn:hover{color:var(--text)}
+.theme-section{padding:16px 20px;border-bottom:1px solid var(--border)}
+.theme-section-label{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);font-family:var(--mono);margin-bottom:14px}
+.theme-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.theme-row-label{font-size:13px;color:var(--text-muted)}
+.theme-color-btn{width:32px;height:32px;border-radius:8px;border:2px solid var(--border-lit);cursor:pointer;transition:transform .15s;overflow:hidden;padding:0}
+.theme-color-btn:hover{transform:scale(1.12)}
+.theme-color-btn input[type=color]{width:100%;height:100%;border:none;outline:none;cursor:pointer;background:none;padding:0;margin:0;-webkit-appearance:none;opacity:0;position:absolute;inset:0}
+.theme-color-swatch{position:relative;width:32px;height:32px;border-radius:6px;overflow:hidden;cursor:pointer;border:2px solid var(--border-lit)}
+.theme-color-swatch input[type=color]{position:absolute;inset:-4px;width:calc(100%+8px);height:calc(100%+8px);cursor:pointer;border:none;padding:0;opacity:0}
+.theme-preset-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:4px}
+.theme-preset{height:36px;border-radius:8px;cursor:pointer;border:2px solid transparent;transition:border-color .15s,transform .15s}
+.theme-preset:hover{transform:scale(1.06)}
+.theme-preset.active{border-color:var(--text)}
+.theme-reset-btn{width:100%;padding:10px;border-radius:var(--radius-sm);background:var(--surface2);border:1px solid var(--border);font-size:13px;font-weight:600;color:var(--text-muted);cursor:pointer;transition:all .15s;margin-top:4px}
+.theme-reset-btn:hover{border-color:var(--border-lit);color:var(--text)}
+.theme-toggle-btn{width:36px;height:36px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);font-size:16px;display:flex;align-items:center;justify-content:center;transition:border-color .15s,background .15s}
+.theme-toggle-btn:hover{border-color:var(--border-lit);background:var(--surface)}
+.theme-toggle-btn.active{border-color:var(--accent);color:var(--accent)}
+
+/* Sidebar now-playing item */
+.sidebar-item[data-view="nowplaying"]{position:relative}
+
 /* Playlist Card Modal */
 .playlist-card-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:250;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
 .playlist-card-overlay.open{opacity:1;pointer-events:all}
@@ -398,6 +468,7 @@ input{font-family:inherit}
       <div class="sidebar-label">Navigate</div>
       <button class="sidebar-item active" data-view="home" onclick="setView('home',this)"><span class="icon">⌂</span>Home</button>
       <button class="sidebar-item" data-view="search" onclick="setView('search',this)"><span class="icon">⌕</span>Search</button>
+      <button class="sidebar-item" data-view="nowplaying" onclick="setView('nowplaying',this)"><span class="icon">♫</span>Now Playing</button>
       <button class="sidebar-item" data-view="library" onclick="setView('library',this)"><span class="icon">◧</span>Library</button>
     </div>
     <div class="sidebar-divider"></div>
@@ -428,6 +499,7 @@ input{font-family:inherit}
         <div class="search-suggestions" id="searchSuggestions"></div>
       </div>
       <div class="topbar-actions">
+        <button class="topbar-btn theme-toggle-btn" id="themeToggleBtn" onclick="toggleThemePanel()" title="Customize Theme">🎨</button>
         <button class="topbar-btn" id="sleepBtn" onclick="openSleepModal()" title="Sleep Timer">🌙</button>
         <button class="topbar-btn" id="lyricsToggleBtn" onclick="toggleLyrics()" title="Lyrics">♪</button>
       </div>
@@ -595,6 +667,54 @@ input{font-family:inherit}
         <button class="playlist-card-save" onclick="saveNewPlaylistFromCard(event)">Create</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Theme Customizer Panel -->
+<div class="theme-panel" id="themePanel">
+  <div class="theme-panel-header">
+    <span class="theme-panel-title">THEME</span>
+    <span class="theme-close-btn" onclick="toggleThemePanel()">✕</span>
+  </div>
+  <div class="theme-section">
+    <div class="theme-section-label">Presets</div>
+    <div class="theme-preset-grid" id="themePresets"></div>
+  </div>
+  <div class="theme-section">
+    <div class="theme-section-label">Colors</div>
+    <div class="theme-row">
+      <span class="theme-row-label">Accent</span>
+      <div class="theme-color-swatch" id="swatchAccent" style="background:var(--accent)">
+        <input type="color" id="colorAccent" value="#c8f542" oninput="applyColor('--accent',this.value);updateSwatch('swatchAccent',this.value)"/>
+      </div>
+    </div>
+    <div class="theme-row">
+      <span class="theme-row-label">Alt Accent</span>
+      <div class="theme-color-swatch" id="swatchAlt" style="background:var(--accent-alt)">
+        <input type="color" id="colorAlt" value="#7c4dff" oninput="applyColor('--accent-alt',this.value);updateSwatch('swatchAlt',this.value)"/>
+      </div>
+    </div>
+    <div class="theme-row">
+      <span class="theme-row-label">Background</span>
+      <div class="theme-color-swatch" id="swatchBg" style="background:var(--bg)">
+        <input type="color" id="colorBg" value="#0a0a0f" oninput="applyColor('--bg',this.value);updateSwatch('swatchBg',this.value)"/>
+      </div>
+    </div>
+    <div class="theme-row">
+      <span class="theme-row-label">Surface</span>
+      <div class="theme-color-swatch" id="swatchSurface" style="background:var(--surface)">
+        <input type="color" id="colorSurface" value="#111118" oninput="applyColor('--surface',this.value);updateSwatch('swatchSurface',this.value)"/>
+      </div>
+    </div>
+    <div class="theme-row">
+      <span class="theme-row-label">Text</span>
+      <div class="theme-color-swatch" id="swatchText" style="background:var(--text)">
+        <input type="color" id="colorText" value="#e8e8f0" oninput="applyColor('--text',this.value);updateSwatch('swatchText',this.value)"/>
+      </div>
+    </div>
+  </div>
+  <div class="theme-section">
+    <button class="theme-reset-btn" onclick="resetTheme()">↺ Reset to Default</button>
   </div>
 </div>
 
@@ -2282,7 +2402,261 @@ async function saveNewPlaylistFromCard(e) {
   renderContent();
 }
 
-// ── Patch handleSearchKey to also dismiss suggestions ───────────────
+// ── Patch setView with page transition ─────────────────────────────
+const _origSetView = setView;
+function setView(view, btnEl) {
+  const c = el('content');
+  c.classList.add('page-leaving');
+  setTimeout(() => {
+    c.classList.remove('page-leaving');
+    _origSetView(view, btnEl);
+    c.classList.add('page-entering');
+    setTimeout(() => c.classList.remove('page-entering'), 320);
+  }, 160);
+}
+
+// ── Now Playing full page ───────────────────────────────────────────
+
+function renderNowPlaying() {
+  const t = state.currentTrack;
+  if (!t) return `
+    <div class="empty-state" style="padding-top:80px">
+      <div class="empty-icon">♫</div>
+      <div class="empty-title">Nothing playing yet</div>
+      <div class="empty-sub">Search or paste a YouTube URL to start listening</div>
+    </div>`;
+
+  const liked = state.likedIds.has(t.id);
+  const lyricsHtml = buildNpLyrics();
+
+  return `
+    <div class="np-page">
+      <div class="np-left">
+        <div class="np-art-wrap ${state.isPlaying ? 'playing' : ''}">
+          <img class="np-art" src="${esc(t.thumbnail)}" onerror="this.style.opacity=.1" alt=""/>
+          <div class="np-aura-ring"></div>
+        </div>
+        <div class="np-info">
+          <div class="np-title">${esc(t.title)}</div>
+          <div class="np-artist">${esc(t.artist)}</div>
+          <div class="np-meta">
+            ${state.isPlaying ? `<span class="np-badge">▶ Playing</span>` : `<span class="np-badge" style="color:var(--text-dim);border-color:var(--border);background:transparent">Paused</span>`}
+            ${t.duration ? `<span style="font-size:12px;color:var(--text-dim);font-family:var(--mono)">${fmtTime(t.duration)}</span>` : ''}
+          </div>
+        </div>
+        <div class="np-actions">
+          <button class="np-action-btn ${liked ? 'liked' : ''}" onclick="toggleCurrentLike();setTimeout(()=>renderContent(),50)">${liked ? '♥ Liked' : '♡ Like'}</button>
+          <button class="np-action-btn" onclick="openPlaylistCard()">＋ Playlist</button>
+          <button class="np-action-btn" onclick="nextTrack()">⏭ Next</button>
+        </div>
+      </div>
+      <div class="np-right">
+        <div class="np-lyrics-box" id="npLyricsBox">
+          <div class="np-lyrics-header">
+            <span class="np-lyrics-label">Lyrics</span>
+            <span class="np-lyrics-source" id="npLyricsSource"></span>
+          </div>
+          <div class="np-lyrics-body" id="npLyricsBody">${lyricsHtml}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function buildNpLyrics() {
+  if (state.lyricsLoading) return `<div class="lyrics-loading">Loading lyrics…</div>`;
+  const data = state.lyricsData;
+  if (!data || data.source === 'none' || (!data.lines?.length && !data.plain)) {
+    return `<div class="np-lyrics-empty"><span class="icon">♪</span><span>No lyrics found</span></div>`;
+  }
+  if (data.synced && data.lines?.length) {
+    return data.lines.map((line, i) =>
+      `<div class="np-lyric-line" data-idx="${i}" data-time="${line.time}"
+            onclick="audio.currentTime=${line.time}">${esc(line.text) || '♩'}</div>`
+    ).join('');
+  }
+  return `<div class="np-lyrics-plain">${esc(data.plain || '')}</div>`;
+}
+
+// Refresh NP lyrics body in-place (no full re-render)
+function refreshNpLyricsBody() {
+  const body = el('npLyricsBody');
+  if (!body) return;
+  body.innerHTML = buildNpLyrics();
+  const src = el('npLyricsSource');
+  if (src && state.lyricsData?.source) src.textContent = state.lyricsData.source;
+}
+
+// Patch renderContent to include nowplaying
+const _origRenderContent = renderContent;
+function renderContent() {
+  const c = el('content');
+  switch (state.view) {
+    case 'nowplaying': c.innerHTML = renderNowPlaying(); break;
+    default: _origRenderContent(); break;
+  }
+}
+
+// Patch loadTrack to fetch lyrics for NP page too
+const _origLoadTrack = loadTrack;
+async function loadTrack(track, queue, index, autoplay) {
+  await _origLoadTrack(track, queue, index, autoplay);
+  if (state.view === 'nowplaying') {
+    fetchLyrics(track.id).then(() => refreshNpLyricsBody());
+  }
+}
+
+// Sync lyrics highlighting on NP page
+const _origUpdateLyricsSync = updateLyricsSync;
+function updateLyricsSync(currentTime) {
+  _origUpdateLyricsSync(currentTime);
+  if (state.view !== 'nowplaying') return;
+  if (!state.lyricsData?.synced) return;
+  const lines = state.lyricsData.lines;
+  if (!lines?.length) return;
+  let lo = 0, hi = lines.length - 1, best = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (lines[mid].time <= currentTime) { best = mid; lo = mid + 1; }
+    else hi = mid - 1;
+  }
+  const body = el('npLyricsBody');
+  if (!body) return;
+  const allLines = body.querySelectorAll('.np-lyric-line');
+  allLines.forEach((el2, i) => {
+    el2.classList.remove('active','past');
+    if (i < best)  el2.classList.add('past');
+    if (i === best) el2.classList.add('active');
+  });
+  const activeLine = body.querySelector('.np-lyric-line.active');
+  if (activeLine) activeLine.scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+// When NP page is opened, auto-fetch lyrics
+const _origSetViewInner = window._origSetView;
+// Hook: when navigating to nowplaying, load lyrics
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-view="nowplaying"]');
+  if (btn && state.currentTrack && !state.lyricsData && !state.lyricsLoading) {
+    setTimeout(() => fetchLyrics(state.currentTrack.id).then(() => refreshNpLyricsBody()), 100);
+  }
+}, true);
+
+// ── Theme Customizer ────────────────────────────────────────────────
+
+const THEME_PRESETS = [
+  { name:'Default',   accent:'#c8f542', alt:'#7c4dff', bg:'#0a0a0f', surface:'#111118', text:'#e8e8f0' },
+  { name:'Neon Blue', accent:'#00d4ff', alt:'#0066ff', bg:'#060b14', surface:'#0a1220', text:'#ddeeff' },
+  { name:'Rose',      accent:'#ff6b9d', alt:'#ff3c78', bg:'#0f0a0c', surface:'#1a1015', text:'#f5e0e8' },
+  { name:'Amber',     accent:'#ffb830', alt:'#ff6b35', bg:'#0d0a06', surface:'#1a1510', text:'#f5eddc' },
+  { name:'Mint',      accent:'#00e5b0', alt:'#00a86b', bg:'#060f0d', surface:'#0d1915', text:'#d8f5ee' },
+  { name:'Purple',    accent:'#b966ff', alt:'#7c4dff', bg:'#09060f', surface:'#12101a', text:'#ede0f5' },
+  { name:'White',     accent:'#222222', alt:'#555555', bg:'#f5f5f0', surface:'#ebebeb', text:'#111111' },
+  { name:'Midnight',  accent:'#4f8ef7', alt:'#c44dff', bg:'#000005', surface:'#0a0a14', text:'#c8c8e8' },
+];
+
+function initThemePresets() {
+  const grid = el('themePresets');
+  if (!grid) return;
+  grid.innerHTML = THEME_PRESETS.map((p, i) => `
+    <div class="theme-preset" id="preset_${i}"
+         style="background:linear-gradient(135deg,${p.bg},${p.accent})"
+         title="${p.name}" onclick="applyPreset(${i})"></div>`).join('');
+}
+
+function applyPreset(idx) {
+  const p = THEME_PRESETS[idx];
+  applyColor('--accent', p.accent);
+  applyColor('--accent-alt', p.alt);
+  applyColor('--bg', p.bg);
+  applyColor('--surface', p.surface);
+  applyColor('--surface2', blendColors(p.surface, p.bg, .5));
+  applyColor('--text', p.text);
+  // Update swatches and pickers
+  updateSwatch('swatchAccent', p.accent); el('colorAccent').value = p.accent;
+  updateSwatch('swatchAlt', p.alt);       el('colorAlt').value = p.alt;
+  updateSwatch('swatchBg', p.bg);         el('colorBg').value = p.bg;
+  updateSwatch('swatchSurface', p.surface); el('colorSurface').value = p.surface;
+  updateSwatch('swatchText', p.text);     el('colorText').value = p.text;
+  // Active preset indicator
+  document.querySelectorAll('.theme-preset').forEach((el2, i) => el2.classList.toggle('active', i === idx));
+  saveTheme();
+  showToast(`Theme: ${p.name} ✓`);
+}
+
+function blendColors(hex1, hex2, t) {
+  const p = (h) => parseInt(h.slice(1), 16);
+  const r1 = (p(hex1)>>16)&255, g1=(p(hex1)>>8)&255, b1=p(hex1)&255;
+  const r2 = (p(hex2)>>16)&255, g2=(p(hex2)>>8)&255, b2=p(hex2)&255;
+  const r = Math.round(r1*(1-t)+r2*t), g = Math.round(g1*(1-t)+g2*t), b = Math.round(b1*(1-t)+b2*t);
+  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+}
+
+function applyColor(varName, value) {
+  document.documentElement.style.setProperty(varName, value);
+  // Also derive surface2 when surface or bg changes
+  if (varName === '--surface' || varName === '--bg') {
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+    const sf = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
+    try { document.documentElement.style.setProperty('--surface2', blendColors(sf, bg, .45)); } catch {}
+  }
+  saveTheme();
+}
+
+function updateSwatch(id, color) {
+  const el2 = el(id);
+  if (el2) el2.style.background = color;
+}
+
+function saveTheme() {
+  try {
+    const vars = ['--accent','--accent-alt','--bg','--surface','--surface2','--text'];
+    const theme = {};
+    vars.forEach(v => { theme[v] = getComputedStyle(document.documentElement).getPropertyValue(v).trim(); });
+    localStorage.setItem('aurastream_theme', JSON.stringify(theme));
+  } catch {}
+}
+
+function loadTheme() {
+  try {
+    const saved = localStorage.getItem('aurastream_theme');
+    if (!saved) return;
+    const theme = JSON.parse(saved);
+    Object.entries(theme).forEach(([k, v]) => document.documentElement.style.setProperty(k, v));
+    // Sync pickers
+    if (theme['--accent'])     { el('colorAccent').value = rgbToHex(theme['--accent']); updateSwatch('swatchAccent', theme['--accent']); }
+    if (theme['--accent-alt']) { el('colorAlt').value    = rgbToHex(theme['--accent-alt']); updateSwatch('swatchAlt', theme['--accent-alt']); }
+    if (theme['--bg'])         { el('colorBg').value     = rgbToHex(theme['--bg']); updateSwatch('swatchBg', theme['--bg']); }
+    if (theme['--surface'])    { el('colorSurface').value= rgbToHex(theme['--surface']); updateSwatch('swatchSurface', theme['--surface']); }
+    if (theme['--text'])       { el('colorText').value   = rgbToHex(theme['--text']); updateSwatch('swatchText', theme['--text']); }
+  } catch {}
+}
+
+function rgbToHex(val) {
+  // Handle both #hex and rgb(r,g,b)
+  if (val && val.startsWith('#')) return val.length === 7 ? val : val;
+  const m = val.match(/\d+/g);
+  if (!m) return '#000000';
+  return '#' + m.slice(0,3).map(n => parseInt(n).toString(16).padStart(2,'0')).join('');
+}
+
+function resetTheme() {
+  const defaults = THEME_PRESETS[0];
+  applyPreset(0);
+  try { localStorage.removeItem('aurastream_theme'); } catch {}
+  showToast('Theme reset ✓');
+}
+
+function toggleThemePanel() {
+  const panel = el('themePanel');
+  const btn   = el('themeToggleBtn');
+  const open  = panel.classList.toggle('open');
+  btn.classList.toggle('active', open);
+}
+
+// Init theme
+initThemePresets();
+loadTheme();
+
 function handleSearchKey(e) {
   if (e.key === 'Escape') {
     e.target.value = '';
