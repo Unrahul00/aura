@@ -228,36 +228,55 @@ input{font-family:inherit}
 /* Responsive */
 @media(max-width:768px){
   :root{--sidebar-w:0px;--player-h:76px}
-  #app{grid-template-columns:1fr}
+
+  /* Layout: keep grid but ensure content isn't clipped by floating controls */
+  #app{grid-template-columns:1fr;grid-template-rows:1fr}
   .sidebar{display:none}
   .main{grid-column:1}
-  /* add extra bottom padding so content never hides behind the fixed player */
   .content{padding:0 16px calc(var(--player-h) + 24px + env(safe-area-inset-bottom));}
   .topbar{padding:16px 16px 12px}
   .track-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
 
-  /* Pin player to bottom on small screens and respect safe-area insets */
+  /* Floating glassmorphic pill player */
   .player-bar{
     position:fixed;
-    left:0;
-    right:0;
-    bottom:calc(env(safe-area-inset-bottom));
-    width:100%;
-    height:var(--player-h);
-    display:flex;
+    bottom:76px;
+    left:12px;
+    right:12px;
+    height:64px;
+    background: rgba(18, 18, 26, 0.85) !important;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius:16px;
+    display:grid;
+    grid-template-columns: 1fr auto;
     align-items:center;
-    gap:12px;
     padding:0 16px;
-    grid-template-columns:none;
-    z-index:120;
-    border-top:1px solid rgba(255,255,255,0.06);
-    background:linear-gradient(180deg, rgba(17,17,24,0.98), rgba(17,17,24,0.98));
-    backdrop-filter:blur(12px);
+    box-shadow:0 8px 32px rgba(0,0,0,0.5);
+    z-index:49;
+    overflow:hidden;
   }
 
-  .player-track{flex:1;min-width:0}
-  .player-controls{min-width:auto;flex-direction:row;align-items:center}
-  .ctrl-buttons{display:flex;gap:8px}
+  /* Track area sizing: allow room for controls */
+  .player-track{display:flex;align-items:center;gap:12px;min-width:0;max-width:75%}
+  .player-track-info{min-width:0;overflow:hidden}
+  .player-track-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .player-track-artist{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* Compact controls inline */
+  .player-controls{display:flex;align-items:center;gap:8px;justify-self:end}
+  .ctrl-buttons{display:flex;gap:8px;align-items:center}
+
+  /* Small integrated play/pause on the right edge of the pill */
+  .ctrl-play{
+    width:36px;height:36px;border-radius:8px;background:transparent;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;border:none;box-shadow:none;padding:0
+  }
+
+  /* Mobile progress tracking micro-line configuration */
+  .player-bar .absolute-bottom-progress{position:absolute;bottom:0;left:0;right:0;height:2px;background:rgba(255,255,255,0.08)}
+  .player-bar .absolute-bottom-progress-fill{height:100%;background:var(--accent);width:0%;transition:width .1s linear}
+
   .player-right{display:none}
   .lyrics-panel{width:100%}
 }
@@ -347,6 +366,9 @@ input{font-family:inherit}
       </div>
       <button class="player-icon-btn" id="lyricsBtn" onclick="toggleLyrics()" title="Lyrics">♪</button>
       <button class="player-icon-btn" onclick="openSleepModal()" title="Sleep Timer">🌙</button>
+    </div>
+    <div class="absolute-bottom-progress">
+      <div id="mobileProgressFill" class="absolute-bottom-progress-fill"></div>
     </div>
   </div>
 </div>
@@ -793,6 +815,8 @@ function updateProgress() {
     const pct = (t / dur) * 100;
     el('progressFill').style.width = `${pct}%`;
     el('progressThumb').style.left = `${pct}%`;
+    const mobileFill = document.getElementById('mobileProgressFill');
+    if (mobileFill) mobileFill.style.width = `${pct}%`;
   }
 
   updateLyricsSync(t);
@@ -816,6 +840,8 @@ function handleScrubChange(clientX, trackEl) {
   const pct100 = pct * 100;
   el('progressFill').style.width = `${pct100}%`;
   el('progressThumb').style.left = `${pct100}%`;
+  const mobileFill = document.getElementById('mobileProgressFill');
+  if (mobileFill) mobileFill.style.width = `${pct100}%`;
 
   // Optional: keep lyrics in sync visually while scrubbing
   updateLyricsSync(newTime);
