@@ -613,16 +613,13 @@ input{font-family:inherit}
 .cache-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
 .cache-card{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;gap:10px;align-items:center;min-width:0}
 .cache-card img{width:48px;height:48px;border-radius:8px;object-fit:cover;background:var(--surface)}
-.status-pill{position:fixed;right:14px;top:14px;z-index:80;border:1px solid var(--border);border-radius:999px;background:rgba(17,17,24,.92);padding:7px 11px;font:11px var(--mono);color:var(--text-muted);backdrop-filter:blur(14px)}
-.status-pill.ok{color:var(--accent);border-color:rgba(200,245,66,.35)}
-.status-pill.bad{color:#ff6b6b;border-color:rgba(255,107,107,.45)}
 .offline-banner{display:none;background:#2a1018;border:1px solid rgba(255,107,107,.35);color:#ffb3b3;border-radius:10px;padding:10px 12px;font-size:13px;margin:10px 0}
 .offline-banner.visible{display:block}
 .app-version{font:11px var(--mono);color:var(--text-dim);padding:10px 22px 0}
 .bulk-sheet{position:fixed;left:0;right:0;bottom:0;z-index:260;background:var(--surface);border-top:1px solid var(--border-lit);border-radius:20px 20px 0 0;transform:translateY(110%);transition:transform .22s ease;max-height:70vh;overflow:auto}
 .bulk-sheet.open{transform:translateY(0)}
 .bulk-sheet-header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border)}
-@media(max-width:768px){.detail-hero{align-items:center}.detail-cover{width:92px;height:92px}.detail-title{font-size:24px}.queue-drawer{width:100%;bottom:0}.status-pill{top:auto;bottom:72px;right:10px}}
+@media(max-width:768px){.detail-hero{align-items:center}.detail-cover{width:92px;height:92px}.detail-title{font-size:24px}.queue-drawer{width:100%;bottom:0}}
 
 /* Lyrics Fullscreen */
 .lyrics-fullscreen{position:fixed;inset:0;z-index:300;background:rgba(6,6,10,0.97);backdrop-filter:blur(32px);display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .3s}
@@ -4020,15 +4017,11 @@ function initHomelabUi() {
   if (tools && !document.querySelector('[data-view="offline"]')) {
     tools.insertAdjacentHTML('beforeend', `<button class="sidebar-item" data-view="continue" onclick="setView('continue',this)"><span class="icon">▶</span>Continue</button><button class="sidebar-item" data-view="offline" onclick="setView('offline',this)"><span class="icon">▣</span>Offline Cache</button>`);
   }
-  if (!el('statusPill')) {
-    document.body.insertAdjacentHTML('beforeend', `<div class="status-pill" id="statusPill">AuraStream ${AURA_APP_VERSION}</div>`);
-  }
   const sidebar = document.querySelector('.sidebar');
   if (sidebar && !el('appVersion')) sidebar.insertAdjacentHTML('beforeend', `<div class="app-version" id="appVersion">v ${AURA_APP_VERSION}</div>`);
 }
 
 async function checkBackendHealth() {
-  const pill = el('statusPill');
   try {
     const res = await fetch(`${API}/api/health`, { cache:'no-store' });
     state.backendOnline = res.ok;
