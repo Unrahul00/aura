@@ -8,8 +8,10 @@ WORKDIR /app
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backend/main.py .
-COPY frontend/index.html .
+# Copy both backend and frontend so backend can serve frontend/index.html
+COPY backend/main.py ./backend/
+COPY frontend/index.html ./frontend/
+
 
 EXPOSE 8000
 
