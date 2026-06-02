@@ -112,24 +112,35 @@ async def _run_ydl(opts: dict, url_or_query: str) -> dict:
     """
     Run yt-dlp extraction in a worker thread to avoid blocking the async loop.
     Returns the raw info dict from yt-dlp.
-    Handles bot detection errors gracefully.
+    Handles all errors gracefully by returning a valid dict.
     """
     def _extract() -> dict:
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
-                return ydl.extract_info(url_or_query, download=False)
+                result = ydl.extract_info(url_or_query, download=False)
+                # Ensure result is a dict (sometimes it might be other types)
+                if isinstance(result, dict):
+                    return result
+                else:
+                    return {"error": "invalid_response", "raw": str(result)}
         except yt_dlp.utils.DownloadError as e:
-            if "bot" in str(e).lower() or "sign in" in str(e).lower():
-                log.warning("YouTube bot detection triggered, retrying with different approach")
-                # Return an error dict instead of raising, so calling code can handle it
-                return {"error": "youtube_blocked", "details": str(e)}
-            raise
+            error_msg = str(e).lower()
+            if "bot" in error_msg or "sign in" in error_msg or "throttle" in error_msg:
+                log.warning("YouTube blocked request: %s", e)
+                return {"error": "youtube_blocked", "message": str(e)}
+            log.error("yt-dlp error: %s", e)
+            return {"error": "download_error", "message": str(e)}
+        except Exception as e:
+            log.error("Unexpected error in _run_ydl: %s", e)
+            return {"error": "unexpected_error", "message": str(e)}
 
     result = await asyncio.to_thread(_extract)
-    if isinstance(result, dict) and "error" in result:
-        raise HTTPException(status_code=429, detail="YouTube rate limited (bot detection). Please try again later.")
+    
+    # Ensure we always return a dict
     if not isinstance(result, dict):
-        raise HTTPException(status_code=502, detail="Invalid response from yt-dlp")
+        log.error("_run_ydl returned non-dict: %s", type(result))
+        return {"error": "invalid_type", "type": str(type(result))}
+    
     return result
 
 
@@ -147,6 +158,11 @@ async def search_tracks(query: str, max_results: int = 20) -> list[dict]:
     opts = _search_opts()
 
     raw = await _run_ydl(opts, yt_query)
+    
+    # Check for error response
+    if isinstance(raw, dict) and "error" in raw:
+        log.warning("Search error for query '%s': %s", query, raw.get("message"))
+        return []
 
     entries = raw.get("entries") or []
     results: list[dict] = []
@@ -176,6 +192,19 @@ async def resolve_stream_url(video_id: str) -> dict:
     opts = _stream_opts()
 
     raw = await _run_ydl(opts, yt_url)
+    
+    # Check if we got an error response
+    if isinstance(raw, dict) and "error" in raw:
+        error_type = raw.get("error")
+        if error_type == "youtube_blocked":
+            raise HTTPException(status_code=429, detail="YouTube blocked this request. Please try again later.")
+        else:
+            log.error("yt-dlp error for %s: %s", video_id, raw.get("message"))
+            raise HTTPException(status_code=502, detail="Failed to fetch video information")
+    
+    if not isinstance(raw, dict):
+        log.error("resolve_stream_url: raw is not a dict: %s", type(raw))
+        raise HTTPException(status_code=502, detail="Invalid response from backend")
 
     # Walk through formats to find the best audio-only stream
     formats = raw.get("formats") or []
