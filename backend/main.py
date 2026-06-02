@@ -128,13 +128,12 @@ def _stream_opts() -> dict:
 
 # ── yt-dlp Async Wrappers ─────────────────────────────────────────────────────
 
-async def _run_ydl(opts: dict, url_or_query: str, retry_count: int = 0) -> dict:
+async def _run_ydl(opts: dict, url_or_query: str) -> dict:
     """
     Run yt-dlp extraction in a worker thread to avoid blocking the async loop.
-    Implements exponential backoff with max 3 retries on YouTube blocks.
-    Uses a semaphore to limit concurrent requests.
-    Returns the raw info dict from yt-dlp.
-    Handles all errors gracefully by returning a valid dict.
+    Uses a semaphore to limit concurrent requests and enforces inter-request throttling.
+    Returns the raw info dict from yt-dlp. Errors are returned immediately without retry.
+    The frontend's fetchWithRetry() handles retries with exponential backoff.
     """
     global _LAST_YDL_REQUEST
     
@@ -178,16 +177,6 @@ async def _run_ydl(opts: dict, url_or_query: str, retry_count: int = 0) -> dict:
                 return {"error": "unexpected_error", "message": str(e)}
 
         result = await asyncio.to_thread(_extract)
-        
-        # Check if we got a YouTube block and should retry with exponential backoff
-        if (isinstance(result, dict) and 
-            result.get("error") == "youtube_blocked" and 
-            retry_count < 3):
-            # Exponential backoff: 5s, 10s, 20s
-            wait_time = 5 * (2 ** retry_count)
-            log.info("YouTube blocked — retrying in %d seconds (attempt %d/3)", wait_time, retry_count + 1)
-            await asyncio.sleep(wait_time)
-            return await _run_ydl(opts, url_or_query, retry_count + 1)
     
     # Ensure we always return a dict
     if not isinstance(result, dict):
@@ -199,8 +188,9 @@ async def _run_ydl(opts: dict, url_or_query: str, retry_count: int = 0) -> dict:
 
 async def search_tracks(query: str, max_results: int = 20) -> list[dict]:
     """
-    Search YouTube Music / YouTube for audio tracks.
+    Search YouTube for audio tracks.
     Returns a sanitised list of track metadata dicts.
+    Raises HTTPException(429) if YouTube blocks the request.
     """
     cached = _info_cache.get(f"search:{query}:{max_results}")
     if cached:
@@ -214,6 +204,14 @@ async def search_tracks(query: str, max_results: int = 20) -> list[dict]:
     
     # Check for error response
     if isinstance(raw, dict) and "error" in raw:
+        error_type = raw.get("error")
+        if error_type == "youtube_blocked":
+            # YouTube is rate limiting — return 429 so client retries
+            raise HTTPException(
+                status_code=429,
+                detail="YouTube is rate-limiting requests. Please try again in a few seconds."
+            )
+        # Other errors return empty results
         log.warning("Search error for query '%s': %s", query, raw.get("message"))
         return []
 
@@ -505,6 +503,9 @@ async def api_search(
         # Classification routing is lightweight in this phase; UI controls `type`.
         # We still return tracks (single audio items) but allow future deep album/artist parsing.
 
+    except HTTPException:
+        # Re-raise HTTPException (like 429 from YouTube blocks)
+        raise
     except yt_dlp.utils.DownloadError as exc:
         log.error("yt-dlp search error: %s", exc)
         raise HTTPException(status_code=502, detail="Search extraction failed")
