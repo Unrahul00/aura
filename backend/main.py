@@ -88,8 +88,6 @@ def _search_opts() -> dict:
         "socket_timeout": 15,
         "extractor_args": "youtube:skip=hls,dash",
         "youtube_include_hls_manifest": False,
-        # Age-gate bypass
-        "age_limit": None,
     }
 
 
@@ -105,8 +103,6 @@ def _stream_opts() -> dict:
         "socket_timeout": 20,
         "extractor_args": "youtube:skip=hls,dash",
         "youtube_include_hls_manifest": False,
-        # Age-gate bypass
-        "age_limit": None,
     }
 
 
@@ -116,12 +112,25 @@ async def _run_ydl(opts: dict, url_or_query: str) -> dict:
     """
     Run yt-dlp extraction in a worker thread to avoid blocking the async loop.
     Returns the raw info dict from yt-dlp.
+    Handles bot detection errors gracefully.
     """
     def _extract() -> dict:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            return ydl.extract_info(url_or_query, download=False)
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                return ydl.extract_info(url_or_query, download=False)
+        except yt_dlp.utils.DownloadError as e:
+            if "bot" in str(e).lower() or "sign in" in str(e).lower():
+                log.warning("YouTube bot detection triggered, retrying with different approach")
+                # Return an error dict instead of raising, so calling code can handle it
+                return {"error": "youtube_blocked", "details": str(e)}
+            raise
 
-    return await asyncio.to_thread(_extract)
+    result = await asyncio.to_thread(_extract)
+    if isinstance(result, dict) and "error" in result:
+        raise HTTPException(status_code=429, detail="YouTube rate limited (bot detection). Please try again later.")
+    if not isinstance(result, dict):
+        raise HTTPException(status_code=502, detail="Invalid response from yt-dlp")
+    return result
 
 
 async def search_tracks(query: str, max_results: int = 20) -> list[dict]:

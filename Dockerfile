@@ -19,4 +19,4 @@ RUN test -f ./backend/main.py && test -f ./frontend/index.html
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "pip install -q --upgrade yt-dlp && uvicorn backend.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "pip install --upgrade yt-dlp && uvicorn backend.main:app --host 0.0.0.0 --port 8000"]

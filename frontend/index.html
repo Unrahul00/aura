@@ -4046,6 +4046,7 @@ async function checkBackendHealth() {
   } catch {
     state.backendOnline = false;
   }
+  const pill = el('statusPill');
   if (pill) {
     pill.classList.toggle('ok', state.backendOnline === true);
     pill.classList.toggle('bad', state.backendOnline === false);
