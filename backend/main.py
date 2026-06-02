@@ -65,22 +65,24 @@ _COMMON_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/125.0.0.0 Safari/537.36"
+        "Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0"
     ),
     "Accept-Language": "en-US,en;q=0.9",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Encoding": "gzip, deflate",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
     "Connection": "keep-alive",
     "Sec-Fetch-Dest": "document",
     "Sec-Fetch-Mode": "navigate",
     "Sec-Fetch-Site": "none",
+    "Upgrade-Insecure-Requests": "1",
 }
 
 
 def _search_opts() -> dict:
     return {
         "format": "bestaudio/best",
-        "quiet": True,
-        "no_warnings": True,
+        "quiet": False,  # Show warnings to debug issues
+        "no_warnings": False,
         "extract_flat": "in_playlist",
         "skip_download": True,
         "youtube_include_dash_manifest": False,
@@ -88,14 +90,17 @@ def _search_opts() -> dict:
         "socket_timeout": 15,
         "extractor_args": "youtube:skip=hls,dash",
         "youtube_include_hls_manifest": False,
+        # Prevent rate limiting
+        "ratelimit": 1.0,  # 1 second between requests
+        "sleep_requests": 2,  # 2 second delay before first request
     }
 
 
 def _stream_opts() -> dict:
     return {
         "format": "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best",
-        "quiet": True,
-        "no_warnings": True,
+        "quiet": False,  # Show warnings to debug issues
+        "no_warnings": False,
         "skip_download": True,
         "youtube_include_dash_manifest": False,
         "noplaylist": True,
@@ -103,6 +108,9 @@ def _stream_opts() -> dict:
         "socket_timeout": 20,
         "extractor_args": "youtube:skip=hls,dash",
         "youtube_include_hls_manifest": False,
+        # Prevent rate limiting
+        "ratelimit": 1.0,  # 1 second between requests
+        "sleep_requests": 2,  # 2 second delay before first request
     }
 
 
@@ -128,8 +136,12 @@ async def _run_ydl(opts: dict, url_or_query: str) -> dict:
             if "bot" in error_msg or "sign in" in error_msg or "throttle" in error_msg:
                 log.warning("YouTube blocked request: %s", e)
                 return {"error": "youtube_blocked", "message": str(e)}
-            log.error("yt-dlp error: %s", e)
+            log.error("yt-dlp DownloadError: %s", e)
             return {"error": "download_error", "message": str(e)}
+        except AttributeError as e:
+            # Handle yt-dlp internal AttributeError (usually means response parsing failed)
+            log.warning("yt-dlp AttributeError (likely bot detection or rate limit): %s", e)
+            return {"error": "youtube_blocked", "message": "YouTube blocked the request"}
         except Exception as e:
             log.error("Unexpected error in _run_ydl: %s", e)
             return {"error": "unexpected_error", "message": str(e)}
