@@ -65,11 +65,14 @@ _COMMON_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
+        "Chrome/125.0.0.0 Safari/537.36"
     ),
     "Accept-Language": "en-US,en;q=0.9",
-    "Accept": "*/*",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
     "Connection": "keep-alive",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
 }
 
 
@@ -83,6 +86,10 @@ def _search_opts() -> dict:
         "youtube_include_dash_manifest": False,
         "http_headers": _COMMON_HEADERS,
         "socket_timeout": 15,
+        "extractor_args": "youtube:skip=hls,dash",
+        "youtube_include_hls_manifest": False,
+        # Age-gate bypass
+        "age_limit": None,
     }
 
 
@@ -96,6 +103,10 @@ def _stream_opts() -> dict:
         "noplaylist": True,
         "http_headers": _COMMON_HEADERS,
         "socket_timeout": 20,
+        "extractor_args": "youtube:skip=hls,dash",
+        "youtube_include_hls_manifest": False,
+        # Age-gate bypass
+        "age_limit": None,
     }
 
 
