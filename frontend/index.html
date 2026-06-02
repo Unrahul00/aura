@@ -1063,6 +1063,45 @@ input{font-family:inherit}
 // Must point to the server that serves /api/* (not the frontend origin).
 const API = '';
 
+// ── Exponential Backoff Retry Helper ─────────────────────────────────
+/**
+ * Fetch with exponential backoff retry for 429 (Too Many Requests) errors.
+ * Retries up to 3 times with delays: 2s, 4s, 8s
+ */
+async function fetchWithRetry(url, options = {}, maxRetries = 3) {
+  let lastError;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      if (response.status === 429) {
+        // YouTube rate limiting — exponential backoff
+        if (attempt < maxRetries) {
+          const waitMs = 2000 * Math.pow(2, attempt);
+          log(`[Retry ${attempt + 1}/${maxRetries}] Rate limited. Waiting ${waitMs}ms...`);
+          await new Promise(r => setTimeout(r, waitMs));
+          continue;
+        } else {
+          // Max retries exceeded
+          return response;
+        }
+      }
+      // All other status codes (success, errors) — return immediately
+      return response;
+    } catch (err) {
+      lastError = err;
+      // Network errors — retry with backoff
+      if (attempt < maxRetries) {
+        const waitMs = 1000 * Math.pow(2, attempt);
+        log(`[Network Retry ${attempt + 1}/${maxRetries}] ${err.message}. Waiting ${waitMs}ms...`);
+        await new Promise(r => setTimeout(r, waitMs));
+        continue;
+      }
+      throw lastError;
+    }
+  }
+  throw lastError || new Error('Fetch failed after max retries');
+}
+
 // ── 1. IndexedDB Setup ──────────────────────────────────────────────
 
 const DB_NAME    = 'aurastream_v2';
@@ -1238,7 +1277,7 @@ async function handleUrlIntent(url) {
   showToast('Loading from URL…');
   try {
     if (parsed.type === 'video') {
-      const res  = await fetch(`${API}/api/track/${parsed.id}`);
+      const res  = await fetchWithRetry(`${API}/api/track/${parsed.id}`);
       if (!res.ok) throw new Error('Track not found');
       const info = await res.json();
       const track = {
@@ -1366,7 +1405,7 @@ async function cacheTrackInBackground(track) {
   await new Promise(r => setTimeout(r, 10000));
   if (state.currentTrack?.id !== track.id) return; // user moved on
   try {
-    const res  = await fetch(`${API}/api/stream/${track.id}`);
+    const res  = await fetchWithRetry(`${API}/api/stream/${track.id}`);
     if (!res.ok) return;
     const blob = await res.blob();
     await cacheAudioBlob(track.id, blob, track);
@@ -1654,7 +1693,7 @@ async function fetchLyrics(videoId) {
   renderLyricsPanel();
 
   try {
-    const res  = await fetch(`${API}/api/lyrics/${videoId}`);
+    const res  = await fetchWithRetry(`${API}/api/lyrics/${videoId}`);
     const data = await res.json();
     state.lyricsData    = data;
     state.lyricsLoading = false;
@@ -1956,7 +1995,7 @@ async function handleSearchInput(val) {
     state.isSearching  = true;
     renderContent();
     try {
-const res  = await fetch(`${API}/api/search?q=${encodeURIComponent(state.searchQuery)}&type=${encodeURIComponent(state.searchType)}&limit=24`);
+const res  = await fetchWithRetry(`${API}/api/search?q=${encodeURIComponent(state.searchQuery)}&type=${encodeURIComponent(state.searchType)}&limit=24`);
       const data = await res.json();
       state.searchResults = data.results || [];
     } catch {

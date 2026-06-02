@@ -24,6 +24,11 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("aurastream")
 
+# ── Global Request Throttling Semaphore ───────────────────────────────────────
+# Limits concurrent yt-dlp extractions to prevent overwhelming YouTube
+_YDL_SEMAPHORE = asyncio.Semaphore(2)  # Max 2 concurrent yt-dlp requests
+_LAST_YDL_REQUEST = time.monotonic()   # Track last request time for inter-request throttling
+
 
 # ── LRU In-Memory Cache ───────────────────────────────────────────────────────
 class LRUCache:
@@ -90,9 +95,13 @@ def _search_opts() -> dict:
         "socket_timeout": 15,
         "extractor_args": "youtube:skip=hls,dash",
         "youtube_include_hls_manifest": False,
-        # Prevent rate limiting
-        "ratelimit": 1.0,  # 1 second between requests
-        "sleep_requests": 2,  # 2 second delay before first request
+        # Aggressive rate limiting to avoid YouTube blocks
+        "ratelimit": 0.5,  # Max 2 requests per second
+        "sleep_requests": 3,  # 3 sec delay before first request
+        "sleep_interval": 3,  # 3 sec between requests
+        "sleep_interval_requests": 5,  # Every 5 requests, sleep extra
+        "socket_timeout": 30,  # Longer timeout for slow connections
+        "force_generic_extractor": False,
     }
 
 
@@ -105,48 +114,80 @@ def _stream_opts() -> dict:
         "youtube_include_dash_manifest": False,
         "noplaylist": True,
         "http_headers": _COMMON_HEADERS,
-        "socket_timeout": 20,
+        "socket_timeout": 30,
         "extractor_args": "youtube:skip=hls,dash",
         "youtube_include_hls_manifest": False,
-        # Prevent rate limiting
-        "ratelimit": 1.0,  # 1 second between requests
-        "sleep_requests": 2,  # 2 second delay before first request
+        # Aggressive rate limiting to avoid YouTube blocks
+        "ratelimit": 0.5,  # Max 2 requests per second
+        "sleep_requests": 3,  # 3 sec delay before first request
+        "sleep_interval": 3,  # 3 sec between requests
+        "socket_timeout": 30,  # Longer timeout for slow connections
+        "force_generic_extractor": False,
     }
 
 
 # ── yt-dlp Async Wrappers ─────────────────────────────────────────────────────
 
-async def _run_ydl(opts: dict, url_or_query: str) -> dict:
+async def _run_ydl(opts: dict, url_or_query: str, retry_count: int = 0) -> dict:
     """
     Run yt-dlp extraction in a worker thread to avoid blocking the async loop.
+    Implements exponential backoff with max 3 retries on YouTube blocks.
+    Uses a semaphore to limit concurrent requests.
     Returns the raw info dict from yt-dlp.
     Handles all errors gracefully by returning a valid dict.
     """
-    def _extract() -> dict:
-        try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                result = ydl.extract_info(url_or_query, download=False)
-                # Ensure result is a dict (sometimes it might be other types)
-                if isinstance(result, dict):
-                    return result
-                else:
-                    return {"error": "invalid_response", "raw": str(result)}
-        except yt_dlp.utils.DownloadError as e:
-            error_msg = str(e).lower()
-            if "bot" in error_msg or "sign in" in error_msg or "throttle" in error_msg:
-                log.warning("YouTube blocked request: %s", e)
-                return {"error": "youtube_blocked", "message": str(e)}
-            log.error("yt-dlp DownloadError: %s", e)
-            return {"error": "download_error", "message": str(e)}
-        except AttributeError as e:
-            # Handle yt-dlp internal AttributeError (usually means response parsing failed)
-            log.warning("yt-dlp AttributeError (likely bot detection or rate limit): %s", e)
-            return {"error": "youtube_blocked", "message": "YouTube blocked the request"}
-        except Exception as e:
-            log.error("Unexpected error in _run_ydl: %s", e)
-            return {"error": "unexpected_error", "message": str(e)}
+    global _LAST_YDL_REQUEST
+    
+    # Acquire semaphore to limit concurrent yt-dlp requests
+    async with _YDL_SEMAPHORE:
+        # Inter-request delay: ensure at least 3 seconds between any two requests
+        elapsed = time.monotonic() - _LAST_YDL_REQUEST
+        min_delay = 3.0
+        if elapsed < min_delay:
+            await asyncio.sleep(min_delay - elapsed)
+        
+        def _extract() -> dict:
+            global _LAST_YDL_REQUEST
+            _LAST_YDL_REQUEST = time.monotonic()
+            
+            try:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    result = ydl.extract_info(url_or_query, download=False)
+                    # Ensure result is a dict (sometimes it might be other types)
+                    if isinstance(result, dict):
+                        return result
+                    else:
+                        return {"error": "invalid_response", "raw": str(result)}
+            except yt_dlp.utils.DownloadError as e:
+                error_msg = str(e).lower()
+                if "bot" in error_msg or "sign in" in error_msg or "throttle" in error_msg:
+                    log.warning("YouTube blocked request (DownloadError): %s", e)
+                    return {"error": "youtube_blocked", "message": str(e)}
+                log.error("yt-dlp DownloadError: %s", e)
+                return {"error": "download_error", "message": str(e)}
+            except AttributeError as e:
+                # Handle yt-dlp internal AttributeError (usually means response parsing failed due to bot detection)
+                error_str = str(e)
+                log.warning("yt-dlp AttributeError (likely bot detection or rate limit): %s", e)
+                # Check if this is the JSON parsing error that indicates YouTube blocked us
+                if "get" in error_str or "json" in error_str.lower():
+                    return {"error": "youtube_blocked", "message": "YouTube blocked the request (JSON parse error)"}
+                return {"error": "youtube_blocked", "message": f"YouTube blocked the request: {error_str}"}
+            except Exception as e:
+                log.error("Unexpected error in _run_ydl: %s", e)
+                return {"error": "unexpected_error", "message": str(e)}
 
-    result = await asyncio.to_thread(_extract)
+        result = await asyncio.to_thread(_extract)
+        
+        # Check if we got a YouTube block and should retry with exponential backoff
+        if (isinstance(result, dict) and 
+            result.get("error") == "youtube_blocked" and 
+            retry_count < 3):
+            # Exponential backoff: 5s, 10s, 20s
+            wait_time = 5 * (2 ** retry_count)
+            log.info("YouTube blocked — retrying in %d seconds (attempt %d/3)", wait_time, retry_count + 1)
+            await asyncio.sleep(wait_time)
+            return await _run_ydl(opts, url_or_query, retry_count + 1)
     
     # Ensure we always return a dict
     if not isinstance(result, dict):
@@ -194,6 +235,7 @@ async def resolve_stream_url(video_id: str) -> dict:
     """
     Resolves the direct audio stream URL for a given YouTube video ID.
     Returns a dict with `url`, `ext`, `content_type`, and track metadata.
+    Includes exponential backoff retry logic for YouTube blocks.
     """
     cached = _url_cache.get(video_id)
     if cached:
@@ -209,7 +251,13 @@ async def resolve_stream_url(video_id: str) -> dict:
     if isinstance(raw, dict) and "error" in raw:
         error_type = raw.get("error")
         if error_type == "youtube_blocked":
-            raise HTTPException(status_code=429, detail="YouTube blocked this request. Please try again later.")
+            # Return 429 to indicate rate limiting — client should back off
+            raise HTTPException(
+                status_code=429, 
+                detail="YouTube is rate-limiting requests. Please try again in a few seconds."
+            )
+        elif error_type == "download_error":
+            raise HTTPException(status_code=404, detail=f"Video not found: {raw.get('message')}")
         else:
             log.error("yt-dlp error for %s: %s", video_id, raw.get("message"))
             raise HTTPException(status_code=502, detail="Failed to fetch video information")
