@@ -1070,18 +1070,33 @@ const API = '';
  */
 async function fetchWithRetry(url, options = {}, maxRetries = 3) {
   let lastError;
+  let cooldownMsg = null;
+  
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const response = await fetch(url, options);
       if (response.status === 429) {
         // YouTube rate limiting — exponential backoff
+        // Try to extract cooldown message from response
+        if (!cooldownMsg) {
+          try {
+            const data = await response.json();
+            cooldownMsg = data.detail || null;
+          } catch {
+            // If no JSON, that's fine, we'll use generic message
+          }
+        }
+        
         if (attempt < maxRetries) {
           const waitMs = 2000 * Math.pow(2, attempt);
           log(`[Retry ${attempt + 1}/${maxRetries}] Rate limited. Waiting ${waitMs}ms...`);
           await new Promise(r => setTimeout(r, waitMs));
           continue;
         } else {
-          // Max retries exceeded
+          // Max retries exceeded — show cooldown message if available
+          if (cooldownMsg) {
+            showToast(`YouTube cooldown: ${cooldownMsg}`, true);
+          }
           return response;
         }
       }

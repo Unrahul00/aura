@@ -24,10 +24,12 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("aurastream")
 
-# ── Global Request Throttling Semaphore ───────────────────────────────────────
+# ── Global Request Throttling & Block Detection ────────────────────────────────
 # Limits concurrent yt-dlp extractions to prevent overwhelming YouTube
 _YDL_SEMAPHORE = asyncio.Semaphore(2)  # Max 2 concurrent yt-dlp requests
 _LAST_YDL_REQUEST = time.monotonic()   # Track last request time for inter-request throttling
+_CONSECUTIVE_BLOCKS = 0                # Track consecutive 429 responses from YouTube
+_BLOCK_COOLDOWN_UNTIL = 0.0            # Timestamp when YouTube block cooldown expires
 
 
 # ── LRU In-Memory Cache ───────────────────────────────────────────────────────
@@ -135,7 +137,18 @@ async def _run_ydl(opts: dict, url_or_query: str) -> dict:
     Returns the raw info dict from yt-dlp. Errors are returned immediately without retry.
     The frontend's fetchWithRetry() handles retries with exponential backoff.
     """
-    global _LAST_YDL_REQUEST
+    global _LAST_YDL_REQUEST, _CONSECUTIVE_BLOCKS, _BLOCK_COOLDOWN_UNTIL
+    
+    # Check if we're in a YouTube block cooldown period
+    now = time.monotonic()
+    if now < _BLOCK_COOLDOWN_UNTIL:
+        cooldown_sec = int(_BLOCK_COOLDOWN_UNTIL - now)
+        log.warning("YouTube block cooldown in effect. Wait %d more seconds before retrying.", cooldown_sec)
+        return {
+            "error": "youtube_cooldown",
+            "message": f"YouTube is blocking requests. Please wait {cooldown_sec} seconds before retrying.",
+            "retry_after": cooldown_sec,
+        }
     
     # Acquire semaphore to limit concurrent yt-dlp requests
     async with _YDL_SEMAPHORE:
@@ -146,7 +159,7 @@ async def _run_ydl(opts: dict, url_or_query: str) -> dict:
             await asyncio.sleep(min_delay - elapsed)
         
         def _extract() -> dict:
-            global _LAST_YDL_REQUEST
+            global _LAST_YDL_REQUEST, _CONSECUTIVE_BLOCKS, _BLOCK_COOLDOWN_UNTIL
             _LAST_YDL_REQUEST = time.monotonic()
             
             try:
@@ -154,6 +167,9 @@ async def _run_ydl(opts: dict, url_or_query: str) -> dict:
                     result = ydl.extract_info(url_or_query, download=False)
                     # Ensure result is a dict (sometimes it might be other types)
                     if isinstance(result, dict):
+                        # Success — reset consecutive block counter
+                        _CONSECUTIVE_BLOCKS = 0
+                        _BLOCK_COOLDOWN_UNTIL = 0.0
                         return result
                     else:
                         return {"error": "invalid_response", "raw": str(result)}
@@ -161,6 +177,13 @@ async def _run_ydl(opts: dict, url_or_query: str) -> dict:
                 error_msg = str(e).lower()
                 if "bot" in error_msg or "sign in" in error_msg or "throttle" in error_msg:
                     log.warning("YouTube blocked request (DownloadError): %s", e)
+                    _CONSECUTIVE_BLOCKS += 1
+                    # Implement exponential cooldown: 10s, 30s, 60s, 120s after 1st, 2nd, 3rd, 4th+ blocks
+                    cooldown_times = [10, 30, 60, 120]
+                    cooldown_idx = min(_CONSECUTIVE_BLOCKS - 1, len(cooldown_times) - 1)
+                    cooldown_duration = cooldown_times[cooldown_idx]
+                    _BLOCK_COOLDOWN_UNTIL = time.monotonic() + cooldown_duration
+                    log.warning("Block #%d detected. Enforcing %d second cooldown.", _CONSECUTIVE_BLOCKS, cooldown_duration)
                     return {"error": "youtube_blocked", "message": str(e)}
                 log.error("yt-dlp DownloadError: %s", e)
                 return {"error": "download_error", "message": str(e)}
@@ -170,6 +193,12 @@ async def _run_ydl(opts: dict, url_or_query: str) -> dict:
                 log.warning("yt-dlp AttributeError (likely bot detection or rate limit): %s", e)
                 # Check if this is the JSON parsing error that indicates YouTube blocked us
                 if "get" in error_str or "json" in error_str.lower():
+                    _CONSECUTIVE_BLOCKS += 1
+                    cooldown_times = [10, 30, 60, 120]
+                    cooldown_idx = min(_CONSECUTIVE_BLOCKS - 1, len(cooldown_times) - 1)
+                    cooldown_duration = cooldown_times[cooldown_idx]
+                    _BLOCK_COOLDOWN_UNTIL = time.monotonic() + cooldown_duration
+                    log.warning("Block #%d detected (AttributeError). Enforcing %d second cooldown.", _CONSECUTIVE_BLOCKS, cooldown_duration)
                     return {"error": "youtube_blocked", "message": "YouTube blocked the request (JSON parse error)"}
                 return {"error": "youtube_blocked", "message": f"YouTube blocked the request: {error_str}"}
             except Exception as e:
@@ -190,7 +219,7 @@ async def search_tracks(query: str, max_results: int = 20) -> list[dict]:
     """
     Search YouTube for audio tracks.
     Returns a sanitised list of track metadata dicts.
-    Raises HTTPException(429) if YouTube blocks the request.
+    Raises HTTPException(429) if YouTube blocks the request or cooldown is active.
     """
     cached = _info_cache.get(f"search:{query}:{max_results}")
     if cached:
@@ -205,11 +234,12 @@ async def search_tracks(query: str, max_results: int = 20) -> list[dict]:
     # Check for error response
     if isinstance(raw, dict) and "error" in raw:
         error_type = raw.get("error")
-        if error_type == "youtube_blocked":
+        if error_type in ("youtube_blocked", "youtube_cooldown"):
             # YouTube is rate limiting — return 429 so client retries
+            detail = raw.get("message", "YouTube is rate-limiting requests. Please try again in a few seconds.")
             raise HTTPException(
                 status_code=429,
-                detail="YouTube is rate-limiting requests. Please try again in a few seconds."
+                detail=detail
             )
         # Other errors return empty results
         log.warning("Search error for query '%s': %s", query, raw.get("message"))
@@ -248,11 +278,12 @@ async def resolve_stream_url(video_id: str) -> dict:
     # Check if we got an error response
     if isinstance(raw, dict) and "error" in raw:
         error_type = raw.get("error")
-        if error_type == "youtube_blocked":
+        if error_type in ("youtube_blocked", "youtube_cooldown"):
             # Return 429 to indicate rate limiting — client should back off
+            detail = raw.get("message", "YouTube is rate-limiting requests. Please try again in a few seconds.")
             raise HTTPException(
                 status_code=429, 
-                detail="YouTube is rate-limiting requests. Please try again in a few seconds."
+                detail=detail
             )
         elif error_type == "download_error":
             raise HTTPException(status_code=404, detail=f"Video not found: {raw.get('message')}")
