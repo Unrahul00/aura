@@ -1063,6 +1063,14 @@ input{font-family:inherit}
 // Must point to the server that serves /api/* (not the frontend origin).
 const API = '';
 
+// ── Frontend request coalescing for autocomplete (permanent fix) ──────────
+// Prevents burst typing from sending /api/suggest & /api/search floods.
+let _suggestAbort = null;
+let _suggestInFlightQuery = '';
+let _suggestDebounceTimer = null;
+let _lastSuggestSentAt = 0;
+
+
 // ── Exponential Backoff Retry Helper ─────────────────────────────────
 /**
  * Fetch with exponential backoff retry for 429 (Too Many Requests) errors.
@@ -2535,6 +2543,12 @@ let _suggestTimeout = null;
 let _suggestData = [];
 let _hideSuggestTimer = null;
 
+// Coalesced autocomplete scheduler parameters
+const SUGGEST_MIN_QUERY_LEN = 3;   // permanent fix: avoid b/bi/bir spam
+const SUGGEST_DEBOUNCE_MS    = 220; // wait after last keypress
+const SUGGEST_MIN_SEND_MS    = 650; // max ~1 suggest per 650ms even if user keeps typing
+
+
 async function handleSearchInput(val) {
   state.searchQuery = val.trim();
   clearTimeout(_searchTimeout);
@@ -2554,15 +2568,58 @@ async function handleSearchInput(val) {
 
   setViewSilent('search');
 
-  // Autocomplete after 200ms
+  // Coalesced autocomplete after a short debounce.
+  // Permanent fix: ensures we send at most one suggest request per burst
+  // and only for sufficiently long queries.
+  const q = state.searchQuery;
+
+  // cancel pending full search/suggest timers (if any)
+  clearTimeout(_suggestTimeout);
+
+  // Abort any in-flight suggest request on new keystrokes
+  if (_suggestAbort) {
+    try { _suggestAbort.abort(); } catch {}
+    _suggestAbort = null;
+  }
+
   _suggestTimeout = setTimeout(async () => {
+    if (!q || q.length < SUGGEST_MIN_QUERY_LEN) {
+      _suggestData = [];
+      renderSuggestions();
+      return;
+    }
+
+    const now = Date.now();
+    const delta = now - _lastSuggestSentAt;
+    const waitForMin = Math.max(0, SUGGEST_MIN_SEND_MS - delta);
+
+    if (waitForMin > 0) {
+      await new Promise(r => setTimeout(r, waitForMin));
+    }
+
+    _lastSuggestSentAt = Date.now();
+
+    _suggestAbort = new AbortController();
     try {
-      const res  = await fetchWithRetry(`${API}/api/suggest?q=${encodeURIComponent(state.searchQuery)}`);
+      const url = `${API}/api/suggest?q=${encodeURIComponent(state.searchQuery)}`;
+      _suggestInFlightQuery = state.searchQuery;
+      const res = await fetch(url, { signal: _suggestAbort.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      if (_suggestInFlightQuery !== state.searchQuery) return; // stale
       _suggestData = data.suggestions || [];
       renderSuggestions();
-    } catch {}
-  }, 200);
+    } catch (e) {
+      // Ignore aborts; for real errors, just hide suggestions.
+      if (e?.name !== 'AbortError') {
+        _suggestData = [];
+        renderSuggestions();
+      }
+    } finally {
+      _suggestAbort = null;
+    }
+  }, SUGGEST_DEBOUNCE_MS);
+
 
   // Full search after 500ms
   _searchTimeout = setTimeout(async () => {

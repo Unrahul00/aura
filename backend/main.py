@@ -18,6 +18,8 @@ import httpx
 import yt_dlp
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 # ── Logging ──────────────────────────────────────────────────────────────────
@@ -63,8 +65,62 @@ class LRUCache:
 
 
 # Global caches
-_info_cache = LRUCache(capacity=512, ttl=3600)   # track metadata
+_info_cache = LRUCache(capacity=512, ttl=3600)   # track metadata + search results
 _url_cache  = LRUCache(capacity=128, ttl=1800)   # resolved stream URLs (shorter TTL)
+_suggest_cache = LRUCache(capacity=1024, ttl=1800)  # suggest results (longer than UI debounce)
+
+
+# ── Per-IP Rate Limiting (lightweight, in-memory) ──────────────────────────
+# This is the permanent fix to prevent frontend burst typing from hammering yt-dlp.
+# It applies to YouTube-expensive endpoints.
+_rate_limit_state: dict[str, dict[str, list[float]]] = {}
+
+
+class _IPRateLimit(BaseHTTPMiddleware):
+    def __init__(self, app: FastAPI):
+        super().__init__(app)
+        # endpoint -> (max_requests, window_seconds)
+        self._limits: dict[str, tuple[int, float]] = {
+            "/api/suggest": (1, 2.0),
+            "/api/search":  (2, 4.0),
+            "/api/related": (2, 8.0),
+        }
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if path not in self._limits:
+            return await call_next(request)
+
+        max_req, window_sec = self._limits[path]
+
+        # Best-effort client identification.
+        # Prefer X-Forwarded-For when behind a proxy.
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            client_ip = xff.split(",")[0].strip()
+        else:
+            client_ip = request.client.host if request.client else "unknown"
+
+        now = time.monotonic()
+        key = f"{client_ip}:{path}"
+
+        bucket = _rate_limit_state.setdefault(key, {}).setdefault("times", [])
+        # purge old timestamps
+        cutoff = now - window_sec
+        bucket[:] = [t for t in bucket if t >= cutoff]
+
+        remaining = max_req - len(bucket)
+        if remaining <= 0:
+            retry_after = max(1, int(window_sec - (now - min(bucket))))
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limited. Please slow down and retry.", "retry_after": retry_after},
+                headers={"Retry-After": str(retry_after)},
+            )
+
+        bucket.append(now)
+        return await call_next(request)
+
 
 
 # ── yt-dlp Configuration Factories ───────────────────────────────────────────
@@ -472,6 +528,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Apply per-IP rate limiting for YouTube-expensive endpoints.
+app.add_middleware(_IPRateLimit)
+
+
 
 # Simple in-memory listening history for discovery seeds
 _listen_history: dict[str, list[float]] = {}
@@ -645,9 +705,18 @@ async def api_suggest(q: str = Query(..., min_length=1)):
 
     GET /api/suggest?q=billie
     """
+
+    key = f"suggest:{q.strip()}"
+    cached = _suggest_cache.get(key)
+    if cached:
+        return JSONResponse(content={"suggestions": cached["suggestions"]}, headers={"Cache-Control": "public, max-age=1800"})
+
     tracks = await search_tracks(q.strip(), max_results=8)
     suggestions = [{"id": t["id"], "title": t["title"], "artist": t["artist"]} for t in tracks]
-    return JSONResponse(content={"suggestions": suggestions})
+
+    _suggest_cache.set(key, {"suggestions": suggestions})
+    return JSONResponse(content={"suggestions": suggestions}, headers={"Cache-Control": "public, max-age=1800"})
+
 
 
 @app.get("/api/related/{video_id}")
