@@ -2542,7 +2542,7 @@ async function handleSearchInput(val) {
   // Autocomplete after 200ms
   _suggestTimeout = setTimeout(async () => {
     try {
-      const res  = await fetch(`${API}/api/suggest?q=${encodeURIComponent(state.searchQuery)}`);
+      const res  = await fetchWithRetry(`${API}/api/suggest?q=${encodeURIComponent(state.searchQuery)}`);
       const data = await res.json();
       _suggestData = data.suggestions || [];
       renderSuggestions();
@@ -2555,7 +2555,7 @@ async function handleSearchInput(val) {
     state.isSearching = true;
     renderContent();
     try {
-      const res  = await fetch(`${API}/api/search?q=${encodeURIComponent(state.searchQuery)}&type=${encodeURIComponent(state.searchType)}&limit=24`);
+      const res  = await fetchWithRetry(`${API}/api/search?q=${encodeURIComponent(state.searchQuery)}&type=${encodeURIComponent(state.searchType)}&limit=24`);
       const data = await res.json();
       state.searchResults = data.results || [];
     } catch {
@@ -3311,7 +3311,7 @@ handleSearchInput = async function(val) {
   syncMobileSearchContent();
   _suggestTimeout = setTimeout(async () => {
     try {
-      const res = await fetch(`${API}/api/suggest?q=${encodeURIComponent(state.searchQuery)}`);
+      const res = await fetchWithRetry(`${API}/api/suggest?q=${encodeURIComponent(state.searchQuery)}`);
       const data = await res.json();
       _suggestData = data.suggestions || [];
       renderSuggestions();
@@ -3324,7 +3324,7 @@ handleSearchInput = async function(val) {
     renderContent();
     syncMobileSearchContent();
     try {
-      const res = await fetch(`${API}/api/search?q=${encodeURIComponent(state.searchQuery)}&type=${encodeURIComponent(state.searchType)}&limit=30`);
+      const res = await fetchWithRetry(`${API}/api/search?q=${encodeURIComponent(state.searchQuery)}&type=${encodeURIComponent(state.searchType)}&limit=30`);
       const data = await res.json();
       state.searchResults = data.results || [];
     } catch {
